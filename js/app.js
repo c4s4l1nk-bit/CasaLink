@@ -298,8 +298,9 @@ class CasaLink {
             if (openUnitLayoutBtn) {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('🏢 Unit layout button clicked via delegation');
-                this.showUnitLayoutDashboard();
+                console.log('🔄 Refreshing unit layout');
+                // Reload the inline unit layout
+                this.loadAndDisplayUnitLayoutInDashboard();
             }
         });
     }
@@ -2354,13 +2355,13 @@ class CasaLink {
                         </div>
                         <h4 style="margin-bottom: 10px; color: var(--text-dark);">Apartment Unit Layout</h4>
                         <p style="color: var(--dark-gray); margin-bottom: 25px;">
-                            View all your apartment units in an interactive layout
+                            Loading your apartment units...
                         </p>
-                        <button class="btn btn-primary" id="openUnitLayoutBtn">
-                            <i class="fas fa-th-large"></i> Open Unit Layout
-                        </button>
+                        <div class="spinner-border text-primary" style="width: 2rem; height: 2rem;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
                         <p style="color: var(--dark-gray); font-size: 0.85rem; margin-top: 15px;">
-                            Shows only units that exist in your database
+                            Retrieving data from database
                         </p>
                     </div>
                 </div>
@@ -2563,6 +2564,397 @@ class CasaLink {
         }
     }
 
+    async loadAndDisplayUnitLayoutInDashboard() {
+        try {
+            console.log('🏢 Loading unit layout for dashboard display...');
+            
+            // Get the container element
+            const container = document.querySelector('.unit-grid-container');
+            if (!container) {
+                console.warn('⚠️ Unit grid container not found');
+                return;
+            }
+            
+            // Show loading state
+            container.innerHTML = `
+                <div style="padding: 40px; text-align: center;">
+                    <div class="spinner-border text-primary" style="width: 2rem; height: 2rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3" style="font-size: 0.95rem; color: var(--gray-600);">
+                        Loading apartment units...
+                    </p>
+                </div>
+            `;
+            
+            // Fetch units, tenants, and leases from Firestore
+            console.log('📡 Fetching units, tenants, and leases for inline display...');
+            const [units, tenants, leases] = await Promise.all([
+                this.fetchAllUnitsFromFirestore(),
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid)
+            ]);
+            
+            // Enrich units with tenant names
+            const enrichedUnits = this.enrichUnitsWithTenantData(units, tenants, leases);
+            
+            if (!enrichedUnits || enrichedUnits.length === 0) {
+                console.log('ℹ️ No units found');
+                container.innerHTML = `
+                    <div style="padding: 40px; text-align: center;">
+                        <i class="fas fa-inbox" style="font-size: 2rem; color: var(--gray-400); margin-bottom: 20px;"></i>
+                        <h5 style="color: var(--gray-600); margin-bottom: 15px;">No Units Found</h5>
+                        <p style="color: var(--gray-500); margin-bottom: 25px;">
+                            You haven't added any apartment units yet.
+                        </p>
+                        <button class="btn btn-primary" onclick="window.app.showAddUnitForm()">
+                            <i class="fas fa-plus"></i> Add Your First Unit
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            console.log(`✅ Loaded ${enrichedUnits.length} units for inline display with tenant data`);
+            
+            // Generate the layout content HTML
+            const layoutHTML = this.generateInlineUnitLayoutHTML(enrichedUnits);
+            
+            // Insert the layout into the container
+            container.innerHTML = layoutHTML;
+            
+            // Setup click handlers
+            this.setupUnitClickHandlers(container);
+            
+            // Setup real-time updates for the inline display
+            this.setupRealtimeUpdatesForInlineLayout(container, enrichedUnits);
+            
+            console.log('✅ Unit layout loaded and displayed in dashboard');
+            
+        } catch (error) {
+            console.error('❌ Error loading inline unit layout:', error);
+            const container = document.querySelector('.unit-grid-container');
+            if (container) {
+                container.innerHTML = `
+                    <div style="padding: 40px; text-align: center;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: var(--danger); margin-bottom: 20px;"></i>
+                        <h5 style="color: var(--danger);">Error Loading Units</h5>
+                        <p style="color: var(--gray-600); margin: 15px 0;">
+                            ${error.message}
+                        </p>
+                        <button class="btn btn-primary mt-3" onclick="window.app.loadAndDisplayUnitLayoutInDashboard()">
+                            <i class="fas fa-redo"></i> Try Again
+                        </button>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    enrichUnitsWithTenantData(units, tenants, leases) {
+        console.log('🔄 Enriching units with tenant data...');
+        
+        // Create a map for quick lookup: roomNumber -> lease info
+        const roomLeaseMap = new Map();
+        
+        // Process leases to find occupied rooms
+        leases.forEach(lease => {
+            if (lease.isActive && lease.roomNumber) {
+                // Find tenant info for this lease
+                const tenant = tenants.find(t => t.id === lease.tenantId);
+                roomLeaseMap.set(lease.roomNumber, {
+                    tenantId: lease.tenantId,
+                    tenantName: tenant?.name || lease.tenantName || 'Unknown Tenant',
+                    tenantEmail: tenant?.email || lease.tenantEmail || 'No email',
+                    leaseStart: lease.leaseStart,
+                    leaseEnd: lease.leaseEnd,
+                    status: tenant?.status || 'unknown'
+                });
+            }
+        });
+        
+        // Enrich units with tenant information
+        const enrichedUnits = units.map(unit => {
+            const leaseInfo = roomLeaseMap.get(unit.roomNumber);
+            
+            return {
+                ...unit,
+                tenantName: leaseInfo?.tenantName || null,
+                tenantEmail: leaseInfo?.tenantEmail || null,
+                leaseInfo: leaseInfo || null
+            };
+        });
+        
+        console.log(`✅ Enriched ${enrichedUnits.length} units with tenant data`);
+        return enrichedUnits;
+    }
+
+    generateInlineUnitLayoutHTML(units) {
+        // Group units by floor
+        const unitsByFloorData = this.groupUnitsByFloor(units);
+        
+        // Calculate statistics
+        const totalUnits = units.length;
+        const occupiedUnits = units.filter(u => u.status === 'occupied').length;
+        const vacantUnits = units.filter(u => u.status === 'vacant').length;
+        const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+        
+        // Build dynamic layout HTML (without modal wrapper)
+        return `
+            <div class="dynamic-unit-layout">
+                <!-- Header -->
+                <div class="layout-header" style="margin-bottom: 30px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+                        <div>
+                            <h3 style="margin: 0 0 10px 0; color: var(--royal-blue);">Apartment Unit Layout</h3>
+                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.95rem;">
+                                Showing ${totalUnits} units from database • Real-time updates active
+                            </p>
+                        </div>
+                        
+                        <!-- Quick Stats -->
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--royal-blue);">${totalUnits}</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Total Units</div>
+                            </div>
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);">${occupiedUnits}</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupied</div>
+                            </div>
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: #dc3545;">${vacantUnits}</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Vacant</div>
+                            </div>
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning);">${occupancyRate}%</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupancy</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Legend -->
+                <div class="unit-legend" style="
+                    background: white;
+                    padding: 15px 20px;
+                    border-radius: 8px;
+                    border: 1px solid #e9ecef;
+                    margin-bottom: 25px;
+                    display: flex;
+                    align-items: center;
+                    gap: 25px;
+                    flex-wrap: wrap;
+                ">
+                    <div style="font-weight: 600; color: var(--text-dark);">Unit Status:</div>
+                    <div style="display: flex; gap: 20px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 14px; height: 14px; border-radius: 4px; background: var(--success); border: 1px solid var(--success);"></div>
+                            <span style="font-size: 0.9rem;">Occupied</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 14px; height: 14px; border-radius: 4px; background: #f8f9fa; border: 1px solid #dc3545;"></div>
+                            <span style="font-size: 0.9rem;">Vacant</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Floor Layouts -->
+                <div class="floor-layouts-container">
+                    ${this.generateFloorLayouts(unitsByFloorData)}
+                </div>
+                
+                <!-- Actions -->
+                <div style="margin-top: 40px; padding-top: 25px; border-top: 1px solid #e9ecef; text-align: center;">
+                    <button class="btn btn-primary" onclick="window.app.showAddUnitForm()">
+                        <i class="fas fa-plus-circle"></i> Add New Unit
+                    </button>
+                </div>
+                
+                <style>
+                    .dynamic-unit-layout {
+                        padding: 10px;
+                    }
+                    
+                    .floor-section {
+                        margin-bottom: 40px;
+                    }
+                    
+                    .floor-title {
+                        font-size: 1.2rem;
+                        font-weight: 600;
+                        color: var(--royal-blue);
+                        margin-bottom: 20px;
+                        padding-bottom: 10px;
+                        border-bottom: 2px solid var(--royal-blue);
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+                    
+                    .unit-grid-dynamic {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                        gap: 15px;
+                        margin-bottom: 20px;
+                    }
+                    
+                    .unit-card-dynamic {
+                        background: white;
+                        border-radius: 10px;
+                        border: 2px solid #e9ecef;
+                        padding: 20px;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                        position: relative;
+                        min-height: 140px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        text-align: center;
+                    }
+                    
+                    .unit-card-dynamic:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+                    }
+                    
+                    .unit-card-dynamic.occupied {
+                        border-color: var(--success);
+                        background: linear-gradient(135deg, rgba(52, 168, 83, 0.05) 0%, white 100%);
+                    }
+                    
+                    .unit-card-dynamic.vacant {
+                        border-color: #e9ecef;
+                        background: linear-gradient(135deg, #f8f9fa 0%, white 100%);
+                    }
+                    
+                    .unit-card-dynamic .unit-number {
+                        font-size: 1.5rem;
+                        font-weight: 700;
+                        color: var(--royal-blue);
+                        margin-bottom: 8px;
+                    }
+                    
+                    .unit-card-dynamic.occupied .unit-number {
+                        color: var(--success);
+                    }
+                    
+                    .unit-status {
+                        font-size: 0.85rem;
+                        font-weight: 600;
+                        padding: 4px 12px;
+                        border-radius: 20px;
+                        margin-bottom: 10px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    
+                    .unit-status.occupied {
+                        background: rgba(52, 168, 83, 0.1);
+                        color: var(--success);
+                        border: 1px solid rgba(52, 168, 83, 0.3);
+                    }
+                    
+                    .unit-status.vacant {
+                        background: rgba(220, 53, 69, 0.1);
+                        color: #dc3545;
+                        border: 1px solid rgba(220, 53, 69, 0.3);
+                    }
+                    
+                    .unit-details {
+                        font-size: 0.85rem;
+                        color: var(--dark-gray);
+                        margin-top: 5px;
+                    }
+                    
+                    .unit-rent {
+                        font-size: 0.9rem;
+                        font-weight: 600;
+                        color: var(--royal-blue);
+                        margin-top: 8px;
+                    }
+                    
+                    .unit-badge {
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        width: 12px;
+                        height: 12px;
+                        border-radius: 50%;
+                    }
+                    
+                    .unit-badge.occupied {
+                        background: var(--success);
+                        box-shadow: 0 0 8px rgba(52, 168, 83, 0.5);
+                    }
+                    
+                    .unit-badge.vacant {
+                        background: #f0f0f0;
+                        border: 1px solid #ccc;
+                    }
+                </style>
+            </div>
+        `;
+    }
+
+    setupRealtimeUpdatesForInlineLayout(container, initialUnits) {
+        console.log('📡 Setting up real-time updates for inline layout...');
+        
+        // Check if already set up to avoid duplicates
+        if (container.dataset.realtimeSetup === 'true') {
+            console.log('ℹ️ Real-time updates already set up');
+            return;
+        }
+        
+        try {
+            const unsubscribe = DataManager.getUnitsWithRealtimeUpdates(
+                this.currentUser.uid,
+                async (updatedUnits) => {
+                    console.log('🔄 Real-time update received for inline layout:', updatedUnits.length, 'units');
+                    
+                    // Only update if container is still in the DOM
+                    if (container && document.body.contains(container)) {
+                        try {
+                            // Fetch fresh tenant and lease data to enrich the updated units
+                            const [tenants, leases] = await Promise.all([
+                                DataManager.getTenants(this.currentUser.uid),
+                                DataManager.getLandlordLeases(this.currentUser.uid)
+                            ]);
+                            
+                            // Enrich updated units with tenant data before displaying
+                            const enrichedUpdatedUnits = this.enrichUnitsWithTenantData(updatedUnits, tenants, leases);
+                            
+                            const layoutHTML = this.generateInlineUnitLayoutHTML(enrichedUpdatedUnits);
+                            container.innerHTML = layoutHTML;
+                            this.setupUnitClickHandlers(container);
+                            console.log('✅ Inline layout updated with enriched real-time data');
+                        } catch (error) {
+                            console.warn('⚠️ Error enriching real-time units:', error);
+                            // Fallback to displaying without enrichment
+                            const layoutHTML = this.generateInlineUnitLayoutHTML(updatedUnits);
+                            container.innerHTML = layoutHTML;
+                            this.setupUnitClickHandlers(container);
+                        }
+                    }
+                }
+            );
+            
+            // Mark as set up
+            container.dataset.realtimeSetup = 'true';
+            
+            // Store unsubscribe function for cleanup
+            if (typeof unsubscribe === 'function') {
+                container.dataset.unsubscribeFn = unsubscribe;
+                console.log('✅ Real-time listener attached');
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not set up real-time updates:', error);
+            // Continue anyway - inline layout is already displayed
+        }
+    }
+
     setupRealtimeUpdates(modal, initialUnits) {
         console.log('📡 Setting up real-time updates...');
         
@@ -2762,7 +3154,7 @@ class CasaLink {
                     status: room.isAvailable === false ? 'occupied' : 'vacant',
                     isAvailable: room.isAvailable !== false,
                     occupiedBy: room.occupiedBy || null,
-                    tenantName: room.occupiedBy ? 'Occupied' : 'Vacant',
+                    tenantName: null, // Will be populated by enrichUnitsWithTenantData
                     numberOfMembers: room.numberOfMembers || 0,
                     maxMembers: room.maxMembers || 0,
                     monthlyRent: room.monthlyRent || 0,
@@ -2807,13 +3199,16 @@ class CasaLink {
             unitsByFloor[floor].push(unit);
         });
         
-        // Sort floors
+        // Sort floors - Rooftop first, then descending by floor number
         const sortedFloors = Object.keys(unitsByFloor).sort((a, b) => {
+            // Rooftop/5 goes first
+            if (a === 'rooftop' || a === 'Rooftop' || a === '5') return -1;
+            if (b === 'rooftop' || b === 'Rooftop' || b === '5') return 1;
+            // Unknown goes last
             if (a === 'unknown') return 1;
             if (b === 'unknown') return -1;
-            if (a === 'rooftop' || a === 'Rooftop' || a === '5') return 1;
-            if (b === 'rooftop' || b === 'Rooftop' || b === '5') return -1;
-            return parseInt(a) - parseInt(b);
+            // Numeric floors in descending order (4, 3, 2, 1)
+            return parseInt(b) - parseInt(a);
         });
         
         // Sort units within each floor by room number
@@ -2832,10 +3227,30 @@ class CasaLink {
             const statusClass = isOccupied ? 'occupied' : 'vacant';
             const statusText = isOccupied ? 'OCCUPIED' : 'VACANT';
             
-            // Format tenant info if occupied
-            const tenantInfo = unit.occupiedBy 
-                ? `<div class="unit-details">${unit.occupiedBy.substring(0, 12)}...</div>`
-                : `<div class="unit-details">Available</div>`;
+            // Format tenant info if occupied - use enriched tenant name from lease
+            const getTenantDisplayName = () => {
+                if (!isOccupied) return 'Available';
+                
+                // Use enriched tenant name from lease data (primary source)
+                if (unit.tenantName) {
+                    // Display full name if 15 chars or less, otherwise truncate with ellipsis
+                    return unit.tenantName.length > 15 
+                        ? unit.tenantName.substring(0, 13) + '..' 
+                        : unit.tenantName;
+                }
+                
+                // Fallback to other tenant name fields
+                if (unit.primaryTenant) {
+                    return unit.primaryTenant.length > 15 
+                        ? unit.primaryTenant.substring(0, 13) + '..' 
+                        : unit.primaryTenant;
+                }
+                
+                // If occupied but no tenant name found, show "Occupied"
+                return 'Occupied';
+            };
+            
+            const tenantInfo = `<div class="unit-details">${getTenantDisplayName()}</div>`;
             
             // Format rent
             const rentInfo = unit.monthlyRent 
@@ -3540,94 +3955,46 @@ class CasaLink {
         });
         
         // Calculate floor statistics
-        const floorOccupied = units.filter(u => u.status === 'occupied').length;
-        const floorVacant = units.filter(u => u.status === 'vacant').length;
+        const floorOccupied = sortedUnits.filter(u => u.status === 'occupied').length;
+        const floorVacant = sortedUnits.filter(u => u.status === 'vacant').length;
         
         return `
-            <div class="floor-layout">
-                <div class="floor-header mb-4">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6 style="font-weight: 600; margin: 0;">
-                                ${floorNumber === 'rooftop' ? '🏠 Rooftop Units' : `🏢 Floor ${floorNumber}`}
-                                <span class="badge bg-primary ms-2">${units.length} units</span>
-                            </h6>
-                            <p style="color: var(--gray-600); font-size: 0.9rem; margin: 5px 0 0 0;">
-                                ${floorNumber === 'rooftop' ? 'Premium rooftop units with views' : `Apartment units on floor ${floorNumber}`}
-                            </p>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="floor-stats" style="display: flex; gap: 15px; justify-content: flex-end; flex-wrap: wrap;">
-                                <div class="stat-item">
-                                    <span class="stat-dot" style="background-color: var(--success);"></span>
-                                    <span class="stat-count">${floorOccupied}</span>
-                                    <span class="stat-label">Occupied</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-dot" style="background-color: #e9ecef; border: 1px solid #dc3545;"></span>
-                                    <span class="stat-count">${floorVacant}</span>
-                                    <span class="stat-label">Vacant</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="floor-section" style="margin-bottom: 40px;">
+                <div class="floor-title" style="
+                    font-size: 1.2rem;
+                    font-weight: 600;
+                    color: var(--royal-blue);
+                    margin-bottom: 20px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid var(--royal-blue);
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                ">
+                    ${floorNumber === 'rooftop' || floorNumber === '5' || floorNumber.toLowerCase().includes('rooftop') 
+                        ? '<i class="fas fa-star" style="color: #1565c0;"></i>' 
+                        : '<i class="fas fa-building" style="color: var(--royal-blue);"></i>'}
+                    ${floorNumber === 'rooftop' || floorNumber === '5' || floorNumber.toLowerCase().includes('rooftop') 
+                        ? 'Rooftop' 
+                        : `Floor ${floorNumber}`}
+                    <span style="
+                        background: var(--royal-blue);
+                        color: white;
+                        padding: 4px 12px;
+                        border-radius: 20px;
+                        font-size: 0.9rem;
+                        font-weight: 600;
+                        margin-left: auto;
+                    ">${sortedUnits.length} units</span>
                 </div>
                 
-                <div class="unit-grid-container">
-                    <!-- Simplified Horizontal Legend -->
-                    <div class="unit-legend-horizontal">
-                        <div class="legend-title">Unit Status Legend</div>
-                        <div class="legend-items-horizontal">
-                            <div class="legend-item">
-                                <span class="legend-color occupied"></span>
-                                <span>Occupied</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-color vacant"></span>
-                                <span>Vacant</span>
-                            </div>
-                        </div>
-                        <div class="legend-stats-horizontal">
-                            <div class="stat-item">
-                                <span class="stat-label">Units:</span>
-                                <span class="stat-value">${units.length}</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-label">Occupancy:</span>
-                                <span class="stat-value">${units.length > 0 ? Math.round((floorOccupied / units.length) * 100) : 0}%</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Perfect Grid Alignment System -->
-                    <div class="unit-grid-layout">
-                        <!-- TOP ROW - Column Labels (A-E) -->
-                        <div class="column-labels-grid">
-                            ${['A', 'B', 'C', 'D', 'E'].map(letter => `
-                                <div class="column-label-grid">${letter}</div>
-                            `).join('')}
-                        </div>
-                        
-                        <!-- LEFT COLUMN - Row Labels (1-4 + Rooftop) -->
-                        <div class="row-labels-grid">
-                            ${[4, 3, 2, 1, 'Rooftop'].map(label => `
-                                <div class="row-label-grid">
-                                    ${label === 'Rooftop' 
-                                        ? `<span class="rooftop-row-label-grid">
-                                            <i class="fas fa-star" style="color: #1565c0;"></i>
-                                            ${label}
-                                        </span>`
-                                        : `Floor ${label}`
-                                    }
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <!-- MAIN GRID CELLS - Perfect alignment -->
-                        <div class="unit-grid-cells">
-                            ${this.generateAligned5x4Grid(units)}
-                        </div>
-                    </div>
+                <div class="unit-grid-dynamic" style="
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                    gap: 15px;
+                    margin-bottom: 20px;
+                ">
+                    ${this.generateFloorUnitCards(sortedUnits)}
                 </div>
             </div>
         `;
@@ -3834,10 +4201,13 @@ class CasaLink {
                 
                 console.log('✅ Unit card clicked:', { unitId, roomNumber });
                 
-                if (unitId) {
-                    this.showUnitDetails(unitId);
+                // Use unitId if available, otherwise use roomNumber (roomNumber is more reliable)
+                const identifier = roomNumber || unitId;
+                
+                if (identifier) {
+                    this.showUnitDetails(identifier);
                 } else {
-                    ToastManager.showToast('Error: Unit ID not found', 'error');
+                    ToastManager.showToast('Error: Unit information not found', 'error');
                 }
             });
         });
@@ -4077,33 +4447,56 @@ class CasaLink {
                     day: 'numeric' 
                 }) : 'Not occupied';
             
-            // Get tenant details if occupied
+            // Get tenant details if occupied - fetch from active lease and tenant data
             let tenantInfo = '';
-            if (room.isAvailable === false && room.occupiedBy) {
+            if (room.isAvailable === false) {
                 try {
-                    const tenantDoc = await firebaseDb.collection('users').doc(room.occupiedBy).get();
-                    if (tenantDoc.exists) {
-                        const tenant = tenantDoc.data();
-                        tenantInfo = `
-                            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid var(--success);">
-                                <h6 style="margin: 0 0 10px 0; color: var(--success);">
-                                    <i class="fas fa-user me-2"></i>Current Tenant
-                                </h6>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                    <div>
-                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 2px;">Name</div>
-                                        <div style="font-weight: 600;">${tenant.name || 'N/A'}</div>
-                                    </div>
-                                    <div>
-                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 2px;">Email</div>
-                                        <div style="font-weight: 600;">${tenant.email || 'N/A'}</div>
+                    console.log('📡 Fetching tenant details from lease data...');
+                    
+                    // Fetch all leases and tenants to find the active one for this room
+                    const [tenants, leases] = await Promise.all([
+                        DataManager.getTenants(this.currentUser.uid),
+                        DataManager.getLandlordLeases(this.currentUser.uid)
+                    ]);
+                    
+                    // Find the active lease for this room
+                    const activeLease = leases.find(lease => 
+                        lease.isActive && lease.roomNumber === room.roomNumber
+                    );
+                    
+                    if (activeLease) {
+                        // Find the tenant associated with this lease
+                        const tenant = tenants.find(t => t.id === activeLease.tenantId);
+                        
+                        if (tenant) {
+                            const occupiedSinceDate = activeLease.leaseStart ? 
+                                new Date(activeLease.leaseStart).toLocaleDateString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric' 
+                                }) : 'Not set';
+                            
+                            tenantInfo = `
+                                <div style="margin-top: 20px; padding: 15px; background: rgba(52, 168, 83, 0.05); border-radius: 8px; border-left: 4px solid var(--success);">
+                                    <h6 style="margin: 0 0 10px 0; color: var(--success);">
+                                        <i class="fas fa-user me-2"></i>Current Tenant
+                                    </h6>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                        <div>
+                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 2px;">Name</div>
+                                            <div style="font-weight: 600; color: var(--success);">${tenant.name || 'N/A'}</div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 0.85em; color: #666; margin-bottom: 2px;">Email</div>
+                                            <div style="font-weight: 600; font-size: 0.9em;">${tenant.email || 'N/A'}</div>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        `;
+                            `;
+                        }
                     }
                 } catch (error) {
-                    console.log('ℹ️ No tenant details found');
+                    console.log('ℹ️ Could not fetch tenant details from lease:', error.message);
                 }
             }
             
@@ -10560,6 +10953,12 @@ class CasaLink {
             const stats = await DataManager.getDashboardStats(this.currentUser.uid, this.currentRole);
             console.log('📊 Fresh dashboard stats:', stats);
             this.updateDashboardWithRealData(stats);
+            
+            // Auto-load unit layout for landlords
+            if (this.currentRole === 'landlord') {
+                console.log('🏢 Auto-loading unit layout for landlord...');
+                await this.loadAndDisplayUnitLayoutInDashboard();
+            }
         } catch (error) {
             console.log('❌ Dashboard data loading failed:', error);
             // Show error state in the cards

@@ -336,6 +336,172 @@
                     console.log('View helper displayLeasesList called', list && list.length);
                 };
 
+                // Error handling helpers for Properties
+                window.showPropertiesError = window.showPropertiesError || function(message) {
+                    console.log('View helper showPropertiesError:', message);
+                    const errorEl = document.getElementById('propertiesError') || 
+                                   document.querySelector('#propertiesSection .error-message') ||
+                                   document.querySelector('#propertiesSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.textContent = message;
+                        errorEl.style.display = 'block';
+                    }
+                };
+
+                window.hidePropertiesError = window.hidePropertiesError || function() {
+                    console.log('View helper hidePropertiesError');
+                    const errorEl = document.getElementById('propertiesError') || 
+                                   document.querySelector('#propertiesSection .error-message') ||
+                                   document.querySelector('#propertiesSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.style.display = 'none';
+                    }
+                };
+
+                // Error handling helpers for Tenants
+                window.showTenantsError = window.showTenantsError || function(message) {
+                    console.log('View helper showTenantsError:', message);
+                    const errorEl = document.getElementById('tenantsError') || 
+                                   document.querySelector('#tenantsSection .error-message') ||
+                                   document.querySelector('#tenantsSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.textContent = message;
+                        errorEl.style.display = 'block';
+                    }
+                };
+
+                window.hideTenantsError = window.hideTenantsError || function() {
+                    console.log('View helper hideTenantsError');
+                    const errorEl = document.getElementById('tenantsError') || 
+                                   document.querySelector('#tenantsSection .error-message') ||
+                                   document.querySelector('#tenantsSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.style.display = 'none';
+                    }
+                };
+
+                // Error handling helpers for Billing
+                window.showBillingError = window.showBillingError || function(message) {
+                    console.log('View helper showBillingError:', message);
+                    const errorEl = document.getElementById('billingError') || 
+                                   document.querySelector('#billingSection .error-message') ||
+                                   document.querySelector('#billingSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.textContent = message;
+                        errorEl.style.display = 'block';
+                    }
+                };
+
+                window.hideBillingError = window.hideBillingError || function() {
+                    console.log('View helper hideBillingError');
+                    const errorEl = document.getElementById('billingError') || 
+                                   document.querySelector('#billingSection .error-message') ||
+                                   document.querySelector('#billingSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.style.display = 'none';
+                    }
+                };
+
+                // Error handling helpers for Maintenance
+                window.showMaintenanceError = window.showMaintenanceError || function(message) {
+                    console.log('View helper showMaintenanceError:', message);
+                    const errorEl = document.getElementById('maintenanceError') || 
+                                   document.querySelector('#maintenanceSection .error-message') ||
+                                   document.querySelector('#maintenanceSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.textContent = message;
+                        errorEl.style.display = 'block';
+                    }
+                };
+
+                window.hideMaintenanceError = window.hideMaintenanceError || function() {
+                    console.log('View helper hideMaintenanceError');
+                    const errorEl = document.getElementById('maintenanceError') || 
+                                   document.querySelector('#maintenanceSection .error-message') ||
+                                   document.querySelector('#maintenanceSection [class*="error"]');
+                    if (errorEl) {
+                        errorEl.style.display = 'none';
+                    }
+                };
+
+                // Stats update helpers
+                window.updateBillingStats = window.updateBillingStats || function(stats) {
+                    console.log('View helper updateBillingStats:', stats);
+                    try {
+                        // Update total bills
+                        const totalEl = document.querySelector('[data-stat="total-bills"]');
+                        if (totalEl) totalEl.textContent = stats.total || 0;
+                        
+                        // Update overdue
+                        const overdueEl = document.querySelector('[data-stat="overdue-bills"]');
+                        if (overdueEl) overdueEl.textContent = stats.overdueAmount || 0;
+                        
+                        // Update collected
+                        const collectedEl = document.querySelector('[data-stat="collected-amount"]');
+                        if (collectedEl) collectedEl.textContent = stats.collectedAmount || 0;
+                    } catch (e) {
+                        console.warn('Error updating billing stats display:', e);
+                    }
+                };
+
+                window.updateMaintenanceStats = window.updateMaintenanceStats || function(stats) {
+                    console.log('View helper updateMaintenanceStats:', stats);
+                    try {
+                        // Update pending
+                        const pendingEl = document.querySelector('[data-stat="pending-requests"]');
+                        if (pendingEl) pendingEl.textContent = stats.pending || 0;
+                        
+                        // Update in-progress
+                        const inProgressEl = document.querySelector('[data-stat="in-progress-requests"]');
+                        if (inProgressEl) inProgressEl.textContent = stats.inProgress || 0;
+                        
+                        // Update closed
+                        const closedEl = document.querySelector('[data-stat="closed-requests"]');
+                        if (closedEl) closedEl.textContent = stats.closed || 0;
+                    } catch (e) {
+                        console.warn('Error updating maintenance stats display:', e);
+                    }
+                };
+
+                // Pagination helper
+                window.updatePagination = window.updatePagination || function(currentPage, totalPages, onPageChange) {
+                    console.log('View helper updatePagination:', { currentPage, totalPages });
+                    try {
+                        const paginationEl = document.querySelector('.pagination') || 
+                                            document.querySelector('[data-component="pagination"]');
+                        if (paginationEl) {
+                            // Clear existing pagination buttons
+                            paginationEl.innerHTML = '';
+                            
+                            // Add previous button
+                            if (currentPage > 1) {
+                                const prevBtn = document.createElement('button');
+                                prevBtn.textContent = '← Previous';
+                                prevBtn.className = 'btn btn-sm btn-outline-secondary';
+                                prevBtn.onclick = () => onPageChange(currentPage - 1);
+                                paginationEl.appendChild(prevBtn);
+                            }
+                            
+                            // Add page info
+                            const pageInfo = document.createElement('span');
+                            pageInfo.className = 'pagination-info';
+                            pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                            paginationEl.appendChild(pageInfo);
+                            
+                            // Add next button
+                            if (currentPage < totalPages) {
+                                const nextBtn = document.createElement('button');
+                                nextBtn.textContent = 'Next →';
+                                nextBtn.className = 'btn btn-sm btn-outline-secondary';
+                                nextBtn.onclick = () => onPageChange(currentPage + 1);
+                                paginationEl.appendChild(nextBtn);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error updating pagination display:', e);
+                    }
+                };
+
             } catch (shimErr) {
                 console.warn('⚠️ Utility/view shim warning:', shimErr);
             }

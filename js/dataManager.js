@@ -222,12 +222,20 @@ class DataManager {
         }
     }
 
-    async getTenants() {
-        if (!this.user) throw new Error('User not authenticated');
+    async getTenants(landlordId) {
+        // If called as instance method and no landlordId provided, check this.user
+        if (!landlordId && this.user) {
+            landlordId = this.user.uid;
+        }
+        // If still no landlordId, check window.currentUser or context
+        if (!landlordId && typeof window !== 'undefined' && window.currentUser) {
+            landlordId = window.currentUser.uid;
+        }
+        if (!landlordId) throw new Error('User not authenticated');
         
         try {
-            const snapshot = await this.db.collection('tenants')
-                .where('landlordId', '==', this.user.uid)
+            const snapshot = await firebaseDb.collection('tenants')
+                .where('landlordId', '==', landlordId)
                 .get();
             
             const tenants = snapshot.docs.map(doc => {
@@ -243,12 +251,16 @@ class DataManager {
         }
     }
 
-    static async getProperties() {
-        if (!this.user) throw new Error('User not authenticated');
+    static async getProperties(landlordId) {
+        // If no landlordId provided, check window.currentUser
+        if (!landlordId && typeof window !== 'undefined' && window.currentUser) {
+            landlordId = window.currentUser.uid;
+        }
+        if (!landlordId) throw new Error('User not authenticated');
         
         try {
-            const snapshot = await this.db.collection('properties')
-                .where('landlordId', '==', this.user.uid)
+            const snapshot = await firebaseDb.collection('properties')
+                .where('landlordId', '==', landlordId)
                 .get();
             
             const properties = snapshot.docs.map(doc => {
@@ -278,19 +290,28 @@ class DataManager {
 
     
     async updateLease(leaseId, updates) {
-        if (!this.user) throw new Error('User not authenticated');
+        // If no user context, check window.currentUser
+        const userId = (this.user && this.user.uid) || (typeof window !== 'undefined' && window.currentUser && window.currentUser.uid);
+        if (!userId) throw new Error('User not authenticated');
         
-        await this.db.collection('leases').doc(leaseId).update({
-            ...updates,
-            updatedAt: new Date().toISOString()
-        });
+        try {
+            await firebaseDb.collection('leases').doc(leaseId).update({
+                ...updates,
+                updatedAt: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('❌ Error updating lease:', error);
+            throw error;
+        }
     }
     
     async deleteLease(leaseId) {
-        if (!this.user) throw new Error('User not authenticated');
+        // If no user context, check window.currentUser
+        const userId = (this.user && this.user.uid) || (typeof window !== 'undefined' && window.currentUser && window.currentUser.uid);
+        if (!userId) throw new Error('User not authenticated');
         
         try {
-            await this.db.collection('leases').doc(leaseId).delete();
+            await firebaseDb.collection('leases').doc(leaseId).delete();
             console.log('✅ Lease deleted:', leaseId);
         } catch (error) {
             console.error('❌ Error deleting lease:', error);
@@ -304,18 +325,20 @@ class DataManager {
 
 
     async createLease(leaseData) {
-        if (!this.user) throw new Error('User not authenticated');
+        // If no user context, check window.currentUser
+        const userId = (this.user && this.user.uid) || (typeof window !== 'undefined' && window.currentUser && window.currentUser.uid);
+        if (!userId) throw new Error('User not authenticated');
         
         try {
             const lease = {
                 ...leaseData,
                 id: this.generateId(),
-                landlordId: this.user.uid,
+                landlordId: userId,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
             
-            await this.db.collection('leases').doc(lease.id).set(lease);
+            await firebaseDb.collection('leases').doc(lease.id).set(lease);
             console.log('✅ Lease created:', lease.id);
             return lease;
         } catch (error) {
@@ -1558,11 +1581,13 @@ class DataManager {
     }
 
     async getTenants() {
-        if (!this.user) throw new Error('User not authenticated');
+        // If no user context, check window.currentUser
+        const userId = (this.user && this.user.uid) || (typeof window !== 'undefined' && window.currentUser && window.currentUser.uid);
+        if (!userId) throw new Error('User not authenticated');
         
         try {
-            const snapshot = await this.db.collection('tenants')
-                .where('landlordId', '==', this.user.uid)
+            const snapshot = await firebaseDb.collection('tenants')
+                .where('landlordId', '==', userId)
                 .get();
             
             const tenants = snapshot.docs.map(doc => {
