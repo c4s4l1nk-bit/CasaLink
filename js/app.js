@@ -210,7 +210,33 @@ class CasaLink {
     }
 
     
+    async clearAllAuthData() {
+        // Unified auth cleanup method
+        console.log('🔒 Clearing all authentication data...');
+        
+        // Clear app state
+        this.currentUser = null;
+        this.currentRole = null;
+        
+        // Clear localStorage and sessionStorage auth items
+        localStorage.removeItem('casalink_user');
+        localStorage.removeItem('casalink_pending_actions');
+        localStorage.removeItem('pendingOperations');
+        sessionStorage.removeItem('casalink_user');
+        sessionStorage.clear();
+        
+        // Sign out from Firebase
+        try {
+            await AuthManager.logout();
+        } catch (error) {
+            console.log('No user to log out or logout failed:', error);
+        }
+        
+        console.log('✅ All authentication data cleared');
+    }
+
     clearStoredAuth() {
+        // Wrapper method for backward compatibility
         // Clear all localStorage items that might contain user data
         localStorage.removeItem('casalink_user');
         localStorage.removeItem('pendingOperations');
@@ -223,31 +249,12 @@ class CasaLink {
     }
 
     async clearAuthentication() {
-        console.log('🔒 Clearing authentication data...');
-        
-        // Clear app state
-        this.currentUser = null;
-        this.currentRole = null;
-        
-        // Clear local storage
-        localStorage.removeItem('casalink_user');
-        localStorage.removeItem('casalink_pending_actions');
-        sessionStorage.removeItem('casalink_user');
-        
-        // Clear any pending operations
-        localStorage.removeItem('pendingOperations');
-        
-        // Sign out from Firebase
-        try {
-            await AuthManager.logout();
-        } catch (error) {
-            console.log('No user to log out or logout failed:', error);
-        }
-        
-        console.log('Authentication data cleared');
+        // Wrapper method for backward compatibility
+        await this.clearAllAuthData();
     }
 
     clearStoredUser() {
+        // Wrapper method for backward compatibility
         // Remove any stored user data to force login
         localStorage.removeItem('casalink_user');
         sessionStorage.removeItem('casalink_user');
@@ -1296,36 +1303,6 @@ class CasaLink {
         }
     }
 
-    async debugActivityCounts() {
-        console.log('🐛 DEBUG: Activity Counts by Type');
-        
-        const now = new Date();
-        const sixtyDaysAgo = new Date();
-        sixtyDaysAgo.setDate(now.getDate() - 60);
-        
-        try {
-            const collections = ['users', 'payments', 'bills', 'maintenance'];
-            const counts = {};
-            
-            for (const collection of collections) {
-                const snapshot = await firebaseDb.collection(collection)
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .where('createdAt', '>=', sixtyDaysAgo)
-                    .where('createdAt', '<=', now)
-                    .get();
-                
-                counts[collection] = snapshot.size;
-                console.log(`📊 ${collection}: ${snapshot.size} documents`);
-            }
-            
-            console.log('📈 Total potential activities:', Object.values(counts).reduce((a, b) => a + b, 0));
-            return counts;
-            
-        } catch (error) {
-            console.error('Debug error:', error);
-        }
-    }
-
     getSampleActivities() {
         console.log('🔍 Creating sample activities for demonstration');
         
@@ -1391,17 +1368,6 @@ class CasaLink {
         return sampleActivities;
     }
 
-    debugRecentActivities() {
-        console.log('🐛 DEBUG: Recent Activities');
-        console.log('Current User:', this.currentUser);
-        
-        const activityList = document.getElementById('recentActivityList');
-        console.log('Activity List Element:', activityList);
-        
-        // Manually trigger activities load
-        this.loadRecentActivities();
-    }
-
     removeDuplicateActivities(activities) {
         const seen = new Set();
         return activities.filter(activity => {
@@ -1413,202 +1379,6 @@ class CasaLink {
             seen.add(key);
             return true;
         });
-    }
-
-    async debugFirestoreCollections() {
-        console.log('🐛 DEBUG: Checking Firestore collections...');
-        
-        const collections = ['users', 'payments', 'bills', 'maintenance'];
-        
-        for (const collection of collections) {
-            try {
-                const snapshot = await firebaseDb.collection(collection)
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .limit(5)
-                    .get();
-                
-                console.log(`📊 ${collection}: ${snapshot.size} documents found`);
-                
-                snapshot.forEach(doc => {
-                    console.log(`   📄 ${doc.id}:`, doc.data());
-                });
-            } catch (error) {
-                console.error(`❌ Error fetching ${collection}:`, error);
-            }
-        }
-    }
-
-    debugRecentActivitiesData() {
-        console.log('🐛 DEBUG: Recent Activities Data Flow');
-        this.debugFirestoreCollections();
-        this.loadRecentActivities();
-    }
-
-    debugActivityQueries() {
-        console.log('🐛 DEBUG: Activity Query Results - ENHANCED');
-        
-        const now = new Date();
-        const sixtyDaysAgo = new Date();
-        sixtyDaysAgo.setDate(now.getDate() - 60);
-        
-        console.log('📅 Date range:', {
-            from: sixtyDaysAgo.toISOString(),
-            to: now.toISOString(),
-            user: this.currentUser.uid
-        });
-
-        // Test each query individually with better error handling
-        const testQueries = [
-            {
-                name: 'users',
-                query: firebaseDb.collection('users')
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .where('role', '==', 'tenant')
-            },
-            {
-                name: 'payments', 
-                query: firebaseDb.collection('payments')
-                    .where('landlordId', '==', this.currentUser.uid)
-            },
-            {
-                name: 'bills',
-                query: firebaseDb.collection('bills')
-                    .where('landlordId', '==', this.currentUser.uid)
-            },
-            {
-                name: 'maintenance',
-                query: firebaseDb.collection('maintenance')
-                    .where('landlordId', '==', this.currentUser.uid)
-            }
-        ];
-        
-        // Test without date filters first
-        console.log('🔍 TEST 1: Without date filters');
-        testQueries.forEach(async (test) => {
-            try {
-                const simpleQuery = firebaseDb.collection(test.name)
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .limit(10);
-                    
-                const snapshot = await simpleQuery.get();
-                console.log(`📊 ${test.name} (no date filter): ${snapshot.size} documents`);
-                
-                if (snapshot.size > 0) {
-                    snapshot.forEach(doc => {
-                        const data = doc.data();
-                        console.log(`   📄 ${doc.id}:`, {
-                            createdAt: data.createdAt,
-                            landlordId: data.landlordId,
-                            // Show relevant fields for each collection
-                            ...(test.name === 'users' && { name: data.name, email: data.email }),
-                            ...(test.name === 'payments' && { amount: data.amount, paymentDate: data.paymentDate }),
-                            ...(test.name === 'bills' && { totalAmount: data.totalAmount, dueDate: data.dueDate }),
-                            ...(test.name === 'maintenance' && { title: data.title, status: data.status })
-                        });
-                    });
-                }
-            } catch (error) {
-                console.error(`❌ Error in ${test.name} simple query:`, error);
-            }
-        });
-
-        // Test with date filters
-        setTimeout(async () => {
-            console.log('\n🔍 TEST 2: With date filters');
-            for (const test of testQueries) {
-                try {
-                    let dateField = 'createdAt';
-                    if (test.name === 'payments') dateField = 'paymentDate';
-                    
-                    const dateQuery = firebaseDb.collection(test.name)
-                        .where('landlordId', '==', this.currentUser.uid)
-                        .where(dateField, '>=', sixtyDaysAgo)
-                        .where(dateField, '<=', now)
-                        .limit(10);
-                        
-                    const snapshot = await dateQuery.get();
-                    console.log(`📊 ${test.name} (with date filter): ${snapshot.size} documents`);
-                    
-                    if (snapshot.size > 0) {
-                        snapshot.forEach(doc => {
-                            const data = doc.data();
-                            console.log(`   📄 ${doc.id}:`, {
-                                [dateField]: data[dateField],
-                                // Show relevant fields
-                                ...(test.name === 'users' && { name: data.name }),
-                                ...(test.name === 'payments' && { amount: data.amount }),
-                                ...(test.name === 'bills' && { totalAmount: data.totalAmount }),
-                                ...(test.name === 'maintenance' && { title: data.title })
-                            });
-                        });
-                    } else {
-                        console.log(`   ℹ️  No documents found with date range for ${test.name}`);
-                        
-                        // Check what dates actually exist in documents
-                        const anyDoc = await firebaseDb.collection(test.name)
-                            .where('landlordId', '==', this.currentUser.uid)
-                            .limit(1)
-                            .get();
-                            
-                        if (!anyDoc.empty) {
-                            const docData = anyDoc.docs[0].data();
-                            const dateValue = docData[dateField] || docData.createdAt;
-                            console.log(`   📅 Sample date in ${test.name}:`, dateValue);
-                        }
-                    }
-                } catch (error) {
-                    console.error(`❌ Error in ${test.name} date query:`, error);
-                }
-            }
-        }, 1000);
-    }
-
-    async debugFirestoreStructure() {
-        console.log('🏗️ DEBUG: Firestore Structure Analysis');
-        
-        const collections = ['users', 'payments', 'bills', 'maintenance'];
-        
-        for (const collection of collections) {
-            try {
-                console.log(`\n📁 Checking ${collection} collection structure...`);
-                
-                // Get first document to see structure
-                const snapshot = await firebaseDb.collection(collection)
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .limit(1)
-                    .get();
-                    
-                if (snapshot.empty) {
-                    console.log(`   ❌ No documents found in ${collection} for current user`);
-                    continue;
-                }
-                
-                const doc = snapshot.docs[0];
-                const data = doc.data();
-                
-                console.log(`   ✅ Document structure for ${collection}:`);
-                console.log('   Fields:', Object.keys(data));
-                
-                // Check for date fields
-                const dateFields = Object.keys(data).filter(key => 
-                    typeof data[key] === 'string' && 
-                    data[key].match(/\d{4}-\d{2}-\d{2}/) &&
-                    !isNaN(new Date(data[key]).getTime())
-                );
-                
-                if (dateFields.length > 0) {
-                    console.log(`   📅 Date fields: ${dateFields.join(', ')}`);
-                    dateFields.forEach(field => {
-                        console.log(`      ${field}: ${data[field]}`);
-                    });
-                } else {
-                    console.log('   ⚠️ No recognizable date fields found');
-                }
-                
-            } catch (error) {
-                console.error(`❌ Error analyzing ${collection}:`, error);
-            }
-        }
     }
 
     async fetchRecentActivities() {
@@ -1826,132 +1596,89 @@ class CasaLink {
 
 
 
-    testActivitiesPagination() {
-        console.log('🧪 Testing activities pagination...');
-        console.log('Pagination State:', {
-            currentPage: this.activitiesCurrentPage,
-            totalPages: this.activitiesTotalPages,
-            itemsPerPage: this.activitiesItemsPerPage,
-            totalItems: this.activitiesFilteredData.length,
-            allData: this.activitiesAllData.length
-        });
-        
+    setupActivitiesPagination() {
+        // Unified pagination setup for activities
         const paginationContainer = document.getElementById('activitiesPagination');
-        console.log('Pagination Container:', paginationContainer ? 'Found' : 'Not Found');
-        
         const pageNumbers = document.getElementById('activitiesPageNumbers');
-        console.log('Page Numbers:', pageNumbers ? 'Found' : 'Not Found');
-        
-        // Force refresh the pagination
-        this.setupActivitiesPagination();
-    }
-
-    updateActivitiesPaginationControls() {
-        const pageNumbers = document.getElementById('activitiesPageNumbers');
-        if (!pageNumbers) {
-            console.error('❌ Activities page numbers container not found');
-            return;
-        }
-        
-        pageNumbers.innerHTML = '';
-        
-        console.log(`🔄 Updating pagination controls for page ${this.activitiesCurrentPage} of ${this.activitiesTotalPages}`);
-        
-        // Show page numbers (max 5 pages)
-        const startPage = Math.max(1, this.activitiesCurrentPage - 2);
-        const endPage = Math.min(this.activitiesTotalPages, startPage + 4);
-        
-        for (let i = startPage; i <= endPage; i++) {
-            const pageButton = document.createElement('button');
-            pageButton.className = `btn btn-sm ${i === this.activitiesCurrentPage ? 'btn-primary' : 'btn-secondary'}`;
-            pageButton.textContent = i;
-            pageButton.onclick = () => {
-                console.log(`🔢 Page ${i} clicked`);
-                this.activitiesCurrentPage = i;
-                this.updateActivitiesList(this.getCurrentActivitiesPage());
-                this.updateActivitiesPaginationControls();
-            };
-            pageNumbers.appendChild(pageButton);
-        }
-        
-        // Update button states
         const prevButton = document.getElementById('activitiesPrevPage');
         const nextButton = document.getElementById('activitiesNextPage');
         
-        if (prevButton) {
-            prevButton.disabled = this.activitiesCurrentPage === 1;
-            prevButton.title = this.activitiesCurrentPage === 1 ? 'You are on the first page' : 'Go to previous page';
-        }
-        
-        if (nextButton) {
-            nextButton.disabled = this.activitiesCurrentPage === this.activitiesTotalPages;
-            nextButton.title = this.activitiesCurrentPage === this.activitiesTotalPages ? 'You are on the last page' : 'Go to next page';
-        }
-        
-        // Update pagination info
-        this.updateActivitiesPaginationInfo();
-        
-        console.log('✅ Pagination controls updated');
-    }
-
-    setupActivitiesPagination() {
-        const paginationContainer = document.getElementById('activitiesPagination');
-        if (!paginationContainer) {
-            console.error('❌ Activities pagination container not found');
+        if (!paginationContainer || !pageNumbers || !prevButton || !nextButton) {
+            console.error('❌ Pagination elements not found');
             return;
         }
         
-        console.log(`🔧 Setting up pagination controls - ${this.activitiesTotalPages} pages available`);
+        console.log(`🔧 Setting up pagination - ${this.activitiesTotalPages} pages available`);
         
-        // Show pagination if we have multiple pages
+        // Show/hide pagination container
         if (this.activitiesTotalPages > 1) {
             paginationContainer.style.display = 'flex';
-            this.updateActivitiesPaginationControls();
+            
+            // Generate page number buttons
+            pageNumbers.innerHTML = '';
+            const startPage = Math.max(1, this.activitiesCurrentPage - 2);
+            const endPage = Math.min(this.activitiesTotalPages, startPage + 4);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageButton = document.createElement('button');
+                pageButton.className = `btn btn-sm ${i === this.activitiesCurrentPage ? 'btn-primary' : 'btn-secondary'}`;
+                pageButton.textContent = i;
+                pageButton.onclick = () => {
+                    console.log(`🔢 Page ${i} clicked`);
+                    this.activitiesCurrentPage = i;
+                    this.updateActivitiesList(this.getCurrentActivitiesPage());
+                    this.setupActivitiesPagination();
+                };
+                pageNumbers.appendChild(pageButton);
+            }
+            
+            // Update prev/next button states
+            prevButton.disabled = this.activitiesCurrentPage === 1;
+            prevButton.title = this.activitiesCurrentPage === 1 ? 'You are on the first page' : 'Go to previous page';
+            nextButton.disabled = this.activitiesCurrentPage === this.activitiesTotalPages;
+            nextButton.title = this.activitiesCurrentPage === this.activitiesTotalPages ? 'You are on the last page' : 'Go to next page';
+            
+            // Setup prev button
+            prevButton.replaceWith(prevButton.cloneNode(true));
+            document.getElementById('activitiesPrevPage').onclick = () => {
+                console.log('⬅️ Previous page clicked');
+                if (this.activitiesCurrentPage > 1) {
+                    this.activitiesCurrentPage--;
+                    this.updateActivitiesList(this.getCurrentActivitiesPage());
+                    this.setupActivitiesPagination();
+                    console.log(`📄 Now on page ${this.activitiesCurrentPage}`);
+                }
+            };
+            
+            // Setup next button
+            nextButton.replaceWith(nextButton.cloneNode(true));
+            document.getElementById('activitiesNextPage').onclick = () => {
+                console.log('➡️ Next page clicked');
+                if (this.activitiesCurrentPage < this.activitiesTotalPages) {
+                    this.activitiesCurrentPage++;
+                    this.updateActivitiesList(this.getCurrentActivitiesPage());
+                    this.setupActivitiesPagination();
+                    console.log(`📄 Now on page ${this.activitiesCurrentPage}`);
+                }
+            };
+            
             console.log('✅ Pagination controls shown');
         } else {
             paginationContainer.style.display = 'none';
             console.log('⏭️ Pagination hidden (only one page)');
         }
         
-        // Setup event listeners
-        this.setupActivitiesPaginationEventListeners();
+        this.updateActivitiesPaginationInfo();
+    }
+
+    updateActivitiesPaginationControls() {
+        // Wrapper method for backward compatibility
+        this.setupActivitiesPagination();
     }
 
     setupActivitiesPaginationEventListeners() {
-        const prevButton = document.getElementById('activitiesPrevPage');
-        const nextButton = document.getElementById('activitiesNextPage');
-        
-        if (prevButton) {
-            // Remove existing event listeners to avoid duplicates
-            prevButton.replaceWith(prevButton.cloneNode(true));
-            const newPrevButton = document.getElementById('activitiesPrevPage');
-            
-            newPrevButton.onclick = () => {
-                console.log('⬅️ Previous page clicked');
-                if (this.activitiesCurrentPage > 1) {
-                    this.activitiesCurrentPage--;
-                    this.updateActivitiesList(this.getCurrentActivitiesPage());
-                    this.updateActivitiesPaginationControls();
-                    console.log(`📄 Now on page ${this.activitiesCurrentPage}`);
-                }
-            };
-        }
-        
-        if (nextButton) {
-            // Remove existing event listeners to avoid duplicates
-            nextButton.replaceWith(nextButton.cloneNode(true));
-            const newNextButton = document.getElementById('activitiesNextPage');
-            
-            newNextButton.onclick = () => {
-                console.log('➡️ Next page clicked');
-                if (this.activitiesCurrentPage < this.activitiesTotalPages) {
-                    this.activitiesCurrentPage++;
-                    this.updateActivitiesList(this.getCurrentActivitiesPage());
-                    this.updateActivitiesPaginationControls();
-                    console.log(`📄 Now on page ${this.activitiesCurrentPage}`);
-                }
-            };
-        }
+        // Wrapper method for backward compatibility - functionality now in setupActivitiesPagination()
+        this.setupActivitiesPagination();
     }
 
     updateActivitiesPaginationInfo() {
@@ -2121,211 +1848,198 @@ class CasaLink {
         }
     }
 
-    async showBillDetailsModalFromActivity(billId) {
+    // Unified activity details modal - consolidates 6 similar modal methods into one
+    async showActivityDetailsModal(activityType, entityId) {
         try {
-            console.log('📄 Loading bill details for activity:', billId);
-            
-            const billDoc = await firebaseDb.collection('bills').doc(billId).get();
-            if (!billDoc.exists) {
-                this.showNotification('Bill not found', 'error');
-                return;
+            let data, modalTitle, modalContent;
+
+            switch (activityType) {
+                case 'bill_generated':
+                    data = { id: entityId, ...(await firebaseDb.collection('bills').doc(entityId).get()).data() };
+                    if (!data) throw new Error('Bill not found');
+                    const dueDate = new Date(data.dueDate);
+                    const isOverdue = data.status === 'pending' && dueDate < new Date();
+                    modalTitle = 'Bill Details';
+                    modalContent = `
+                        <div class="activity-details-modal">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <i class="fas fa-file-invoice" style="font-size: 3rem; color: var(--warning); margin-bottom: 15px;"></i>
+                                <h3 style="margin-bottom: 10px;">${data.isAutoGenerated ? 'Auto-Generated Bill' : 'Manual Bill'}</h3>
+                                <p>Details for bill generation activity</p>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Bill Information</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div><strong>Tenant:</strong><br>${data.tenantName || 'N/A'}</div>
+                                    <div><strong>Room:</strong><br>${data.roomNumber || 'N/A'}</div>
+                                    <div><strong>Amount:</strong><br><span style="font-weight: 600; color: var(--royal-blue);">₱${(data.totalAmount || 0).toLocaleString()}</span></div>
+                                    <div><strong>Type:</strong><br>${(data.type || 'rent').charAt(0).toUpperCase() + (data.type || 'rent').slice(1)}</div>
+                                    <div><strong>Due Date:</strong><br>${dueDate.toLocaleDateString()}${isOverdue ? '<br><small style="color: var(--danger);">Overdue</small>' : ''}</div>
+                                    <div><strong>Status:</strong><br>${this.getBillStatusBadge(data)}</div>
+                                    <div><strong>Description:</strong><br>${data.description || 'Monthly Rent'}</div>
+                                    <div><strong>Created:</strong><br>${new Date(data.createdAt).toLocaleDateString()}</div>
+                                </div>
+                            </div>
+                            ${data.isAutoGenerated ? `<div style="background: rgba(251, 188, 4, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;"><p style="margin: 0;"><i class="fas fa-robot"></i> <strong>Auto-Generated:</strong> This bill was automatically generated by the system</p></div>` : ''}
+                            <div class="modal-footer">
+                                <button class="btn btn-primary" onclick="casaLink.switchBillingView('bills')"><i class="fas fa-file-invoice-dollar"></i> View All Bills</button>
+                                ${data.status !== 'paid' ? `<button class="btn btn-success" onclick="casaLink.recordPaymentModal('${data.id}')"><i class="fas fa-credit-card"></i> Record Payment</button>` : ''}
+                                <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">Close</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case 'new_lease':
+                    data = { id: entityId, ...(await firebaseDb.collection('leases').doc(entityId).get()).data() };
+                    if (!data) throw new Error('Lease not found');
+                    const leaseStart = data.leaseStart ? new Date(data.leaseStart) : null;
+                    const leaseEnd = data.leaseEnd ? new Date(data.leaseEnd) : null;
+                    modalTitle = 'Lease Agreement Details';
+                    modalContent = `
+                        <div class="activity-details-modal">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                                <h3 style="margin-bottom: 10px;">Lease Agreement</h3>
+                                <p>Details for lease activity</p>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Lease Information</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div><strong>Tenant:</strong><br>${data.tenantName || 'N/A'}</div>
+                                    <div><strong>Room:</strong><br>${data.roomNumber || 'N/A'}</div>
+                                    <div><strong>Monthly Rent:</strong><br>₱${(data.monthlyRent || 0).toLocaleString()}</div>
+                                    <div><strong>Security Deposit:</strong><br>₱${(data.securityDeposit || 0).toLocaleString()}</div>
+                                    <div><strong>Lease Period:</strong><br>${leaseStart ? leaseStart.toLocaleDateString() : 'N/A'} to ${leaseEnd ? leaseEnd.toLocaleDateString() : 'N/A'}</div>
+                                    <div><strong>Status:</strong><br><span class="status-badge ${data.isActive ? 'active' : 'inactive'}">${data.isActive ? 'Active' : 'Inactive'}</span></div>
+                                </div>
+                            </div>
+                            ${data.occupants && data.occupants.length > 0 ? `<div style="background: rgba(52, 168, 83, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;"><h5 style="margin: 0 0 10px 0; color: var(--success);">Occupants</h5><ul style="margin: 0;">${data.occupants.map(occupant => `<li>${occupant}</li>`).join('')}</ul></div>` : ''}
+                            <div class="modal-footer">
+                                <button class="btn btn-primary" onclick="casaLink.showPage('tenants')"><i class="fas fa-users"></i> View Tenant Details</button>
+                                <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">Close</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case 'new_tenant':
+                    data = { id: entityId, ...(await firebaseDb.collection('users').doc(entityId).get()).data() };
+                    if (!data) throw new Error('Tenant not found');
+                    const leaseQuery = await firebaseDb.collection('leases').where('tenantId', '==', entityId).where('isActive', '==', true).limit(1).get();
+                    const lease = leaseQuery.empty ? null : { id: leaseQuery.docs[0].id, ...leaseQuery.docs[0].data() };
+                    modalTitle = 'Tenant Registration Details';
+                    modalContent = `
+                        <div class="activity-details-modal">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <i class="fas fa-user-plus" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                                <h3 style="margin-bottom: 10px;">New Tenant Registration</h3>
+                                <p>Details for tenant registration activity</p>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Tenant Information</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div><strong>Name:</strong><br>${data.name || 'N/A'}</div>
+                                    <div><strong>Email:</strong><br>${data.email || 'N/A'}</div>
+                                    <div><strong>Phone:</strong><br>${data.phone || 'N/A'}</div>
+                                    <div><strong>Occupation:</strong><br>${data.occupation || 'N/A'}</div>
+                                    <div><strong>Status:</strong><br><span class="status-badge ${data.status === 'verified' ? 'active' : 'warning'}">${data.status || 'unverified'}</span></div>
+                                    <div><strong>Registered:</strong><br>${data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'N/A'}</div>
+                                </div>
+                            </div>
+                            ${lease ? `<div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;"><h4 style="color: var(--royal-blue); margin-bottom: 15px;">Lease Information</h4><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;"><div><strong>Room Number:</strong><br>${lease.roomNumber || 'N/A'}</div><div><strong>Monthly Rent:</strong><br>₱${(lease.monthlyRent || 0).toLocaleString()}</div><div><strong>Lease Start:</strong><br>${lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString() : 'N/A'}</div><div><strong>Lease Status:</strong><br><span class="status-badge ${lease.isActive ? 'active' : 'inactive'}">${lease.isActive ? 'Active' : 'Inactive'}</span></div></div></div>` : ''}
+                            <div class="modal-footer">
+                                <button class="btn btn-primary" onclick="casaLink.showPage('tenants')"><i class="fas fa-users"></i> Go to Tenant Management</button>
+                                <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">Close</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case 'payment_received':
+                    data = { id: entityId, ...(await firebaseDb.collection('payments').doc(entityId).get()).data() };
+                    if (!data) throw new Error('Payment not found');
+                    const paymentDate = new Date(data.paymentDate || data.createdAt);
+                    modalTitle = 'Payment Details';
+                    modalContent = `
+                        <div class="activity-details-modal">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <i class="fas fa-credit-card" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                                <h3 style="margin-bottom: 10px;">Payment Received</h3>
+                                <p>Details for payment activity</p>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Payment Information</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div><strong>Tenant:</strong><br>${data.tenantName || 'N/A'}</div>
+                                    <div><strong>Room:</strong><br>${data.roomNumber || 'N/A'}</div>
+                                    <div><strong>Amount:</strong><br><span style="font-weight: 600; color: var(--success);">₱${(data.amount || 0).toLocaleString()}</span></div>
+                                    <div><strong>Payment Method:</strong><br>${this.formatPaymentMethod(data.paymentMethod)}</div>
+                                    <div><strong>Payment Date:</strong><br>${paymentDate.toLocaleDateString()}</div>
+                                    <div><strong>Reference:</strong><br>${data.referenceNumber || 'N/A'}</div>
+                                </div>
+                            </div>
+                            ${data.billId ? `<div style="background: rgba(52, 168, 83, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;"><p style="margin: 0;"><i class="fas fa-receipt"></i> <strong>Bill Paid:</strong> This payment was applied to bill ${data.billId.substring(0, 8)}</p></div>` : ''}
+                            <div class="modal-footer">
+                                <button class="btn btn-primary" onclick="casaLink.switchBillingView('payments')"><i class="fas fa-money-check"></i> View All Payments</button>
+                                <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">Close</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case 'maintenance_request':
+                    data = await DataManager.getMaintenanceRequest(entityId);
+                    if (!data) throw new Error('Maintenance request not found');
+                    const createdDate = new Date(data.createdAt);
+                    const priorityColors = { 'high': 'var(--danger)', 'medium': 'var(--warning)', 'low': 'var(--success)' };
+                    const priorityColor = priorityColors[data.priority] || 'var(--dark-gray)';
+                    modalTitle = 'Maintenance Request Details';
+                    modalContent = `
+                        <div class="activity-details-modal">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <i class="fas fa-tools" style="font-size: 3rem; color: var(--info); margin-bottom: 15px;"></i>
+                                <h3 style="margin-bottom: 10px;">Maintenance Request</h3>
+                                <p>Details for maintenance request activity</p>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Request Information</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div><strong>Tenant:</strong><br>${data.tenantName || 'N/A'}</div>
+                                    <div><strong>Room:</strong><br>${data.roomNumber || 'N/A'}</div>
+                                    <div><strong>Type:</strong><br>${(data.type || 'general').replace('_', ' ')}</div>
+                                    <div><strong>Priority:</strong><br><span style="color: ${priorityColor}; font-weight: 600;">${(data.priority || 'medium').charAt(0).toUpperCase() + (data.priority || 'medium').slice(1)}</span></div>
+                                    <div><strong>Status:</strong><br>${this.getStatusBadge(data.status)}</div>
+                                    <div><strong>Submitted:</strong><br>${createdDate.toLocaleDateString()}</div>
+                                </div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Issue Details</h4>
+                                <div><strong>Title:</strong><br><p style="margin: 10px 0; font-weight: 500;">${data.title || 'No title'}</p></div>
+                                <div><strong>Description:</strong><br><p style="margin: 10px 0; line-height: 1.6; background: white; padding: 15px; border-radius: 6px;">${data.description || 'No description provided'}</p></div>
+                            </div>
+                            ${data.assignedName ? `<div style="background: rgba(26, 115, 232, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;"><p style="margin: 0;"><i class="fas fa-user-check"></i> <strong>Assigned To:</strong> ${data.assignedName}</p></div>` : ''}
+                            <div class="modal-footer">
+                                <button class="btn btn-primary" onclick="casaLink.showPage('maintenance')"><i class="fas fa-tools"></i> View All Maintenance</button>
+                                ${data.status !== 'completed' ? `<button class="btn btn-warning" onclick="casaLink.updateMaintenanceRequest('${data.id}')"><i class="fas fa-edit"></i> Update Status</button>` : ''}
+                                <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">Close</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                default:
+                    throw new Error('Unknown activity type: ' + activityType);
             }
 
-            const bill = { id: billDoc.id, ...billDoc.data() };
-            const dueDate = new Date(bill.dueDate);
-            const createdDate = new Date(bill.createdAt);
-            const isOverdue = bill.status === 'pending' && dueDate < new Date();
-
-            const modalContent = `
-                <div class="activity-details-modal">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <i class="fas fa-file-invoice" style="font-size: 3rem; color: var(--warning); margin-bottom: 15px;"></i>
-                        <h3 style="margin-bottom: 10px;">${bill.isAutoGenerated ? 'Auto-Generated Bill' : 'Manual Bill'}</h3>
-                        <p>Details for bill generation activity</p>
-                    </div>
-
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Bill Information</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <strong>Tenant:</strong><br>
-                                ${bill.tenantName || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Room:</strong><br>
-                                ${bill.roomNumber || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Amount:</strong><br>
-                                <span style="font-weight: 600; color: var(--royal-blue);">
-                                    ₱${(bill.totalAmount || 0).toLocaleString()}
-                                </span>
-                            </div>
-                            <div>
-                                <strong>Type:</strong><br>
-                                ${(bill.type || 'rent').charAt(0).toUpperCase() + (bill.type || 'rent').slice(1)}
-                            </div>
-                            <div>
-                                <strong>Due Date:</strong><br>
-                                ${dueDate.toLocaleDateString()}
-                                ${isOverdue ? '<br><small style="color: var(--danger);">Overdue</small>' : ''}
-                            </div>
-                            <div>
-                                <strong>Status:</strong><br>
-                                ${this.getBillStatusBadge(bill)}
-                            </div>
-                            <div>
-                                <strong>Description:</strong><br>
-                                ${bill.description || 'Monthly Rent'}
-                            </div>
-                            <div>
-                                <strong>Created:</strong><br>
-                                ${createdDate.toLocaleDateString()}
-                            </div>
-                        </div>
-                    </div>
-
-                    ${bill.isAutoGenerated ? `
-                        <div style="background: rgba(251, 188, 4, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                            <p style="margin: 0;">
-                                <i class="fas fa-robot"></i> 
-                                <strong>Auto-Generated:</strong> This bill was automatically generated by the system
-                            </p>
-                        </div>
-                    ` : ''}
-
-                    <div class="modal-footer">
-                        <button class="btn btn-primary" onclick="casaLink.switchBillingView('bills')">
-                            <i class="fas fa-file-invoice-dollar"></i> View All Bills
-                        </button>
-                        ${bill.status !== 'paid' ? `
-                            <button class="btn btn-success" onclick="casaLink.recordPaymentModal('${bill.id}')">
-                                <i class="fas fa-credit-card"></i> Record Payment
-                            </button>
-                        ` : ''}
-                        <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            `;
-
             ModalManager.openModal(modalContent, {
-                title: 'Bill Details',
+                title: modalTitle,
                 showFooter: false
             });
 
         } catch (error) {
-            console.error('❌ Error loading bill details:', error);
-            this.showNotification('Failed to load bill details', 'error');
-        }
-    }
-
-    async showMaintenanceRequestDetailsModalFromActivity(requestId) {
-        try {
-            console.log('🔧 Loading maintenance details for activity:', requestId);
-            
-            const request = await DataManager.getMaintenanceRequest(requestId);
-            if (!request) {
-                this.showNotification('Maintenance request not found', 'error');
-                return;
-            }
-
-            const createdDate = new Date(request.createdAt);
-            const priorityColors = {
-                'high': 'var(--danger)',
-                'medium': 'var(--warning)', 
-                'low': 'var(--success)'
-            };
-            const priorityColor = priorityColors[request.priority] || 'var(--dark-gray)';
-
-            const modalContent = `
-                <div class="activity-details-modal">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <i class="fas fa-tools" style="font-size: 3rem; color: var(--info); margin-bottom: 15px;"></i>
-                        <h3 style="margin-bottom: 10px;">Maintenance Request</h3>
-                        <p>Details for maintenance request activity</p>
-                    </div>
-
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Request Information</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <strong>Tenant:</strong><br>
-                                ${request.tenantName || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Room:</strong><br>
-                                ${request.roomNumber || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Type:</strong><br>
-                                ${(request.type || 'general').replace('_', ' ')}
-                            </div>
-                            <div>
-                                <strong>Priority:</strong><br>
-                                <span style="color: ${priorityColor}; font-weight: 600;">
-                                    ${(request.priority || 'medium').charAt(0).toUpperCase() + (request.priority || 'medium').slice(1)}
-                                </span>
-                            </div>
-                            <div>
-                                <strong>Status:</strong><br>
-                                ${this.getStatusBadge(request.status)}
-                            </div>
-                            <div>
-                                <strong>Submitted:</strong><br>
-                                ${createdDate.toLocaleDateString()}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Issue Details</h4>
-                        <div>
-                            <strong>Title:</strong><br>
-                            <p style="margin: 10px 0; font-weight: 500;">${request.title || 'No title'}</p>
-                        </div>
-                        <div>
-                            <strong>Description:</strong><br>
-                            <p style="margin: 10px 0; line-height: 1.6; background: white; padding: 15px; border-radius: 6px;">
-                                ${request.description || 'No description provided'}
-                            </p>
-                        </div>
-                    </div>
-
-                    ${request.assignedName ? `
-                        <div style="background: rgba(26, 115, 232, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                            <p style="margin: 0;">
-                                <i class="fas fa-user-check"></i> 
-                                <strong>Assigned To:</strong> ${request.assignedName}
-                            </p>
-                        </div>
-                    ` : ''}
-
-                    <div class="modal-footer">
-                        <button class="btn btn-primary" onclick="casaLink.showPage('maintenance')">
-                            <i class="fas fa-tools"></i> View All Maintenance
-                        </button>
-                        ${request.status !== 'completed' ? `
-                            <button class="btn btn-warning" onclick="casaLink.updateMaintenanceRequest('${request.id}')">
-                                <i class="fas fa-edit"></i> Update Status
-                            </button>
-                        ` : ''}
-                        <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            ModalManager.openModal(modalContent, {
-                title: 'Maintenance Request Details',
-                showFooter: false
-            });
-
-        } catch (error) {
-            console.error('❌ Error loading maintenance details:', error);
-            this.showNotification('Failed to load maintenance details', 'error');
+            console.error('❌ Error displaying activity details:', error);
+            this.showNotification('Failed to load details', 'error');
         }
     }
 
@@ -2344,308 +2058,11 @@ class CasaLink {
         }
     }
 
-    async showLeaseDetailsModalFromActivity(leaseId) {
-        try {
-            console.log('📑 Loading lease details for activity:', leaseId);
-            
-            const leaseDoc = await firebaseDb.collection('leases').doc(leaseId).get();
-            if (!leaseDoc.exists) {
-                this.showNotification('Lease not found', 'error');
-                return;
-            }
-
-            const lease = { id: leaseDoc.id, ...leaseDoc.data() };
-            const leaseStart = lease.leaseStart ? new Date(lease.leaseStart) : null;
-            const leaseEnd = lease.leaseEnd ? new Date(lease.leaseEnd) : null;
-
-            const modalContent = `
-                <div class="activity-details-modal">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
-                        <h3 style="margin-bottom: 10px;">Lease Agreement</h3>
-                        <p>Details for lease activity</p>
-                    </div>
-
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Lease Information</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <strong>Tenant:</strong><br>
-                                ${lease.tenantName || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Room:</strong><br>
-                                ${lease.roomNumber || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Monthly Rent:</strong><br>
-                                ₱${(lease.monthlyRent || 0).toLocaleString()}
-                            </div>
-                            <div>
-                                <strong>Security Deposit:</strong><br>
-                                ₱${(lease.securityDeposit || 0).toLocaleString()}
-                            </div>
-                            <div>
-                                <strong>Lease Period:</strong><br>
-                                ${leaseStart ? leaseStart.toLocaleDateString() : 'N/A'} to ${leaseEnd ? leaseEnd.toLocaleDateString() : 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Status:</strong><br>
-                                <span class="status-badge ${lease.isActive ? 'active' : 'inactive'}">
-                                    ${lease.isActive ? 'Active' : 'Inactive'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    ${lease.occupants && lease.occupants.length > 0 ? `
-                        <div style="background: rgba(52, 168, 83, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                            <h5 style="margin: 0 0 10px 0; color: var(--success);">Occupants</h5>
-                            <ul style="margin: 0;">
-                                ${lease.occupants.map(occupant => `<li>${occupant}</li>`).join('')}
-                            </ul>
-                        </div>
-                    ` : ''}
-
-                    <div class="modal-footer">
-                        <button class="btn btn-primary" onclick="casaLink.showPage('tenants')">
-                            <i class="fas fa-users"></i> View Tenant Details
-                        </button>
-                        <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            ModalManager.openModal(modalContent, {
-                title: 'Lease Agreement Details',
-                showFooter: false
-            });
-
-        } catch (error) {
-            console.error('❌ Error loading lease details:', error);
-            this.showNotification('Failed to load lease details', 'error');
-        }
-    }
-
-    async showTenantDetailsModalFromActivity(tenantId) {
-        try {
-            console.log('👤 Loading tenant details for activity:', tenantId);
-            
-            const tenantDoc = await firebaseDb.collection('users').doc(tenantId).get();
-            if (!tenantDoc.exists) {
-                this.showNotification('Tenant not found', 'error');
-                return;
-            }
-
-            const tenant = { id: tenantDoc.id, ...tenantDoc.data() };
-            
-            // Get lease information
-            const leaseQuery = await firebaseDb.collection('leases')
-                .where('tenantId', '==', tenantId)
-                .where('isActive', '==', true)
-                .limit(1)
-                .get();
-                
-            const lease = leaseQuery.empty ? null : { id: leaseQuery.docs[0].id, ...leaseQuery.docs[0].data() };
-
-            const modalContent = `
-                <div class="activity-details-modal">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <i class="fas fa-user-plus" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
-                        <h3 style="margin-bottom: 10px;">New Tenant Registration</h3>
-                        <p>Details for tenant registration activity</p>
-                    </div>
-
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Tenant Information</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <strong>Name:</strong><br>
-                                ${tenant.name || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Email:</strong><br>
-                                ${tenant.email || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Phone:</strong><br>
-                                ${tenant.phone || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Occupation:</strong><br>
-                                ${tenant.occupation || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Status:</strong><br>
-                                <span class="status-badge ${tenant.status === 'verified' ? 'active' : 'warning'}">
-                                    ${tenant.status || 'unverified'}
-                                </span>
-                            </div>
-                            <div>
-                                <strong>Registered:</strong><br>
-                                ${tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString() : 'N/A'}
-                            </div>
-                        </div>
-                    </div>
-
-                    ${lease ? `
-                        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                            <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Lease Information</h4>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div>
-                                    <strong>Room Number:</strong><br>
-                                    ${lease.roomNumber || 'N/A'}
-                                </div>
-                                <div>
-                                    <strong>Monthly Rent:</strong><br>
-                                    ₱${(lease.monthlyRent || 0).toLocaleString()}
-                                </div>
-                                <div>
-                                    <strong>Lease Start:</strong><br>
-                                    ${lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString() : 'N/A'}
-                                </div>
-                                <div>
-                                    <strong>Lease Status:</strong><br>
-                                    <span class="status-badge ${lease.isActive ? 'active' : 'inactive'}">
-                                        ${lease.isActive ? 'Active' : 'Inactive'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    ` : ''}
-
-                    <div class="modal-footer">
-                        <button class="btn btn-primary" onclick="casaLink.showPage('tenants')">
-                            <i class="fas fa-users"></i> Go to Tenant Management
-                        </button>
-                        <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            ModalManager.openModal(modalContent, {
-                title: 'Tenant Registration Details',
-                showFooter: false
-            });
-
-        } catch (error) {
-            console.error('❌ Error loading tenant details:', error);
-            this.showNotification('Failed to load tenant details', 'error');
-        }
-    }
-
-    async showPaymentDetailsModalFromActivity(paymentId) {
-        try {
-            console.log('💰 Loading payment details for activity:', paymentId);
-            
-            const paymentDoc = await firebaseDb.collection('payments').doc(paymentId).get();
-            if (!paymentDoc.exists) {
-                this.showNotification('Payment not found', 'error');
-                return;
-            }
-
-            const payment = { id: paymentDoc.id, ...paymentDoc.data() };
-            const paymentDate = new Date(payment.paymentDate || payment.createdAt);
-
-            const modalContent = `
-                <div class="activity-details-modal">
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <i class="fas fa-credit-card" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
-                        <h3 style="margin-bottom: 10px;">Payment Received</h3>
-                        <p>Details for payment activity</p>
-                    </div>
-
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Payment Information</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div>
-                                <strong>Tenant:</strong><br>
-                                ${payment.tenantName || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Room:</strong><br>
-                                ${payment.roomNumber || 'N/A'}
-                            </div>
-                            <div>
-                                <strong>Amount:</strong><br>
-                                <span style="font-weight: 600; color: var(--success);">
-                                    ₱${(payment.amount || 0).toLocaleString()}
-                                </span>
-                            </div>
-                            <div>
-                                <strong>Payment Method:</strong><br>
-                                ${this.formatPaymentMethod(payment.paymentMethod)}
-                            </div>
-                            <div>
-                                <strong>Payment Date:</strong><br>
-                                ${paymentDate.toLocaleDateString()}
-                            </div>
-                            <div>
-                                <strong>Reference:</strong><br>
-                                ${payment.referenceNumber || 'N/A'}
-                            </div>
-                        </div>
-                    </div>
-
-                    ${payment.billId ? `
-                        <div style="background: rgba(52, 168, 83, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                            <p style="margin: 0;">
-                                <i class="fas fa-receipt"></i> 
-                                <strong>Bill Paid:</strong> This payment was applied to bill ${payment.billId.substring(0, 8)}
-                            </p>
-                        </div>
-                    ` : ''}
-
-                    <div class="modal-footer">
-                        <button class="btn btn-primary" onclick="casaLink.switchBillingView('payments')">
-                            <i class="fas fa-money-check"></i> View All Payments
-                        </button>
-                        <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            ModalManager.openModal(modalContent, {
-                title: 'Payment Details',
-                showFooter: false
-            });
-
-        } catch (error) {
-            console.error('❌ Error loading payment details:', error);
-            this.showNotification('Failed to load payment details', 'error');
-        }
-    }
-
     async viewActivityDetails(activityType, activityId) {
         console.log('🔍 Viewing activity details:', { activityType, activityId });
         
         try {
-            switch (activityType) {
-                case 'new_tenant':
-                    await this.showTenantDetailsModalFromActivity(activityId);
-                    break;
-                case 'payment_received':
-                    await this.showPaymentDetailsModalFromActivity(activityId);
-                    break;
-                case 'bill_generated':
-                    await this.showBillDetailsModalFromActivity(activityId);
-                    break;
-                case 'maintenance_request':
-                    await this.showMaintenanceRequestDetailsModalFromActivity(activityId);
-                    break;
-                case 'new_lease':
-                    await this.showLeaseDetailsModalFromActivity(activityId);
-                    break;
-                default:
-                    console.log('Unknown activity type:', activityType);
-                    this.showNotification('Activity details not available for this type', 'info');
-            }
+            await this.showActivityDetailsModal(activityType, activityId);
         } catch (error) {
             console.error('❌ Error viewing activity details:', error);
             this.showNotification('Failed to load activity details', 'error');
@@ -2861,34 +2278,6 @@ class CasaLink {
             });
     }
 
-    debugUnitLayout() {
-        console.log('🐛 Unit Layout Debug Information:');
-        console.log('================================');
-        console.log('Current User:', this.currentUser?.uid);
-        console.log('Current Role:', this.currentRole);
-        console.log('Current Page:', this.currentPage);
-        
-        // Check if modal is open
-        const modal = document.querySelector('.modal-overlay');
-        console.log('Modal Open:', !!modal);
-        
-        if (modal) {
-            console.log('Modal Element:', modal);
-            console.log('Unit Cards in Modal:', modal.querySelectorAll('.unit-card').length);
-            console.log('Tab Elements:', modal.querySelectorAll('[data-bs-toggle="tab"]').length);
-        }
-        
-        // Test data fetching
-        DataManager.getLandlordUnits(this.currentUser.uid)
-            .then(units => {
-                console.log('Units from Database:', units.length);
-                console.log('Sample Unit:', units[0]);
-            })
-            .catch(error => {
-                console.error('Database Error:', error);
-            });
-    }
-
     bindMethodsToWindow() {
     console.log('🔗 Binding methods to window.app...');
     
@@ -2903,7 +2292,6 @@ class CasaLink {
         'showUnitLayoutDashboard',
         'showUnitDetails',
         'showAddUnitForm',
-        'exportUnitReport',
         'refreshUnitLayout',
         'setupUnitClickHandlers',
         'generateDynamicUnitLayout'
@@ -3349,9 +2737,6 @@ class CasaLink {
                     <button class="btn btn-primary" onclick="window.app.showAddUnitForm()">
                         <i class="fas fa-plus"></i> Add First Unit
                     </button>
-                    <button class="btn btn-secondary" onclick="testFirestoreData()">
-                        <i class="fas fa-database"></i> Check Firestore Data
-                    </button>
                 </div>
             </div>
         `;
@@ -3483,706 +2868,667 @@ class CasaLink {
 
     generateFloorLayouts(unitsByFloorData) {
         const { unitsByFloor, sortedFloors } = unitsByFloorData;
-        let html = '';
-        
-        sortedFloors.forEach(floor => {
-            const floorUnits = unitsByFloor[floor];
-            const floorName = floor === '5' || floor.toLowerCase().includes('rooftop') 
-                ? 'Rooftop' 
-                : `Floor ${floor}`;
-            
-            const floorIcon = floor === '5' || floor.toLowerCase().includes('rooftop')
-                ? '<i class="fas fa-star" style="color: #1565c0;"></i>'
-                : '<i class="fas fa-building" style="color: var(--royal-blue);"></i>';
-            
-            html += `
-                <div class="floor-section">
-                    <div class="floor-title">
-                        ${floorIcon} ${floorName}
-                        <span class="floor-badge">${floorUnits.length} units</span>
-                    </div>
-                    
-                    <div class="unit-grid-dynamic">
-                        ${this.generateFloorUnitCards(floorUnits)}
-                    </div>
+        return sortedFloors.map(floor => `
+            <div class="floor-section">
+                <div class="floor-title">
+                    ${floor === '5' || floor.toLowerCase().includes('rooftop') ? '<i class="fas fa-star" style="color: #1565c0;"></i>' : '<i class="fas fa-building" style="color: var(--royal-blue);"></i>'}
+                    ${floor === '5' || floor.toLowerCase().includes('rooftop') ? 'Rooftop' : `Floor ${floor}`}
+                    <span class="floor-badge">${unitsByFloor[floor].length} units</span>
                 </div>
-            `;
-        });
-        
-        return html;
+                <div class="unit-grid-dynamic">
+                    ${this.generateFloorUnitCards(unitsByFloor[floor])}
+                </div>
+            </div>
+        `).join('');
     }
 
-    exportUnitReport() {
-        // This would generate and download a report
-        ToastManager.showToast('Export feature coming soon!', 'info');
-    }
-
-    generateDynamicUnitLayout(modal, units) {
-        console.log('🏗️ Generating dynamic unit layout...');
+    // Unified method for generating unit layouts (both dynamic and dashboard)
+    generateUnitLayout(units, modal, layoutType = 'dynamic') {
+        console.log(`🏗️ Generating ${layoutType} unit layout...`);
         
         // Calculate statistics
         const totalUnits = units.length;
         const occupiedUnits = units.filter(u => u.status === 'occupied').length;
-        const vacantUnits = totalUnits - occupiedUnits;
+        const vacantUnits = units.filter(u => u.status === 'vacant').length;
+        const maintenanceUnits = units.filter(u => u.status === 'maintenance').length;
+        const reservedUnits = units.filter(u => u.status === 'reserved').length;
         const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
         
         // Group units by floor
-        const unitsByFloor = this.groupUnitsByFloor(units);
+        const unitsByFloorData = this.groupUnitsByFloor(units);
+        const { unitsByFloor, sortedFloors } = unitsByFloorData;
         
-        // Generate the layout HTML
-        const layoutHTML = `
-            <div class="dynamic-unit-layout">
-                <!-- Header -->
-                <div class="layout-header" style="margin-bottom: 30px;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
-                        <div>
-                            <h3 style="margin: 0 0 10px 0; color: var(--royal-blue);">Apartment Unit Layout</h3>
-                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.95rem;">
-                                Showing ${totalUnits} units from database • Real-time updates active
-                            </p>
+        let layoutHTML;
+        
+        if (layoutType === 'dynamic') {
+            // Dynamic Layout with stats header, legend, and floor sections
+            layoutHTML = `
+                <div class="dynamic-unit-layout">
+                    <!-- Header -->
+                    <div class="layout-header" style="margin-bottom: 30px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+                            <div>
+                                <h3 style="margin: 0 0 10px 0; color: var(--royal-blue);">Apartment Unit Layout</h3>
+                                <p style="margin: 0; color: var(--dark-gray); font-size: 0.95rem;">
+                                    Showing ${totalUnits} units from database • Real-time updates active
+                                </p>
+                            </div>
+                            
+                            <!-- Quick Stats -->
+                            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                <div style="text-align: center; min-width: 100px;">
+                                    <div style="font-size: 1.8rem; font-weight: 700; color: var(--royal-blue);">${totalUnits}</div>
+                                    <div style="font-size: 0.85rem; color: var(--dark-gray);">Total Units</div>
+                                </div>
+                                <div style="text-align: center; min-width: 100px;">
+                                    <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);">${occupiedUnits}</div>
+                                    <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupied</div>
+                                </div>
+                                <div style="text-align: center; min-width: 100px;">
+                                    <div style="font-size: 1.8rem; font-weight: 700; color: #dc3545;">${vacantUnits}</div>
+                                    <div style="font-size: 0.85rem; color: var(--dark-gray);">Vacant</div>
+                                </div>
+                                <div style="text-align: center; min-width: 100px;">
+                                    <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning);">${occupancyRate}%</div>
+                                    <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupancy</div>
+                                </div>
+                            </div>
                         </div>
-                        
-                        <!-- Quick Stats -->
-                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                            <div style="text-align: center; min-width: 100px;">
-                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--royal-blue);">${totalUnits}</div>
-                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Total Units</div>
+                    </div>
+                    
+                    <!-- Legend -->
+                    <div class="unit-legend" style="
+                        background: white;
+                        padding: 15px 20px;
+                        border-radius: 8px;
+                        border: 1px solid #e9ecef;
+                        margin-bottom: 25px;
+                        display: flex;
+                        align-items: center;
+                        gap: 25px;
+                        flex-wrap: wrap;
+                    ">
+                        <div style="font-weight: 600; color: var(--text-dark);">Unit Status:</div>
+                        <div style="display: flex; gap: 20px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 14px; height: 14px; border-radius: 4px; background: var(--success); border: 1px solid var(--success);"></div>
+                                <span style="font-size: 0.9rem;">Occupied</span>
                             </div>
-                            <div style="text-align: center; min-width: 100px;">
-                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);">${occupiedUnits}</div>
-                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupied</div>
-                            </div>
-                            <div style="text-align: center; min-width: 100px;">
-                                <div style="font-size: 1.8rem; font-weight: 700; color: #dc3545;">${vacantUnits}</div>
-                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Vacant</div>
-                            </div>
-                            <div style="text-align: center; min-width: 100px;">
-                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning);">${occupancyRate}%</div>
-                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupancy</div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 14px; height: 14px; border-radius: 4px; background: #f8f9fa; border: 1px solid #dc3545;"></div>
+                                <span style="font-size: 0.9rem;">Vacant</span>
                             </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Legend -->
-                <div class="unit-legend" style="
-                    background: white;
-                    padding: 15px 20px;
-                    border-radius: 8px;
-                    border: 1px solid #e9ecef;
-                    margin-bottom: 25px;
-                    display: flex;
-                    align-items: center;
-                    gap: 25px;
-                    flex-wrap: wrap;
-                ">
-                    <div style="font-weight: 600; color: var(--text-dark);">Unit Status:</div>
-                    <div style="display: flex; gap: 20px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div style="width: 14px; height: 14px; border-radius: 4px; background: var(--success); border: 1px solid var(--success);"></div>
-                            <span style="font-size: 0.9rem;">Occupied</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div style="width: 14px; height: 14px; border-radius: 4px; background: #f8f9fa; border: 1px solid #dc3545;"></div>
-                            <span style="font-size: 0.9rem;">Vacant</span>
-                        </div>
+                    
+                    <!-- Floor Layouts -->
+                    <div class="floor-layouts-container">
+                        ${this.generateFloorLayouts(unitsByFloorData)}
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div style="margin-top: 40px; padding-top: 25px; border-top: 1px solid #e9ecef; text-align: center;">
+                        <button class="btn btn-primary" onclick="window.app.showAddUnitForm()">
+                            <i class="fas fa-plus-circle"></i> Add New Unit
+                        </button>
                     </div>
                 </div>
                 
-                <!-- Floor Layouts -->
-                <div class="floor-layouts-container">
-                    ${this.generateFloorLayouts(unitsByFloor)}
-                </div>
-                
-                <!-- Actions -->
-                <div style="margin-top: 40px; padding-top: 25px; border-top: 1px solid #e9ecef; text-align: center;">
-                    <button class="btn btn-primary" onclick="window.app.showAddUnitForm()">
-                        <i class="fas fa-plus-circle"></i> Add New Unit
-                    </button>
-                    <button class="btn btn-secondary" onclick="window.app.exportUnitReport()" style="margin-left: 10px;">
-                        <i class="fas fa-download"></i> Export Report
-                    </button>
-                </div>
-            </div>
-            
-            <style>
-                .dynamic-unit-layout {
-                    padding: 10px;
-                }
-                
-                .floor-section {
-                    margin-bottom: 40px;
-                }
-                
-                .floor-title {
-                    font-size: 1.2rem;
-                    font-weight: 600;
-                    color: var(--royal-blue);
-                    margin-bottom: 20px;
-                    padding-bottom: 10px;
-                    border-bottom: 2px solid var(--royal-blue);
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                }
-                
-                .unit-grid-dynamic {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-                    gap: 15px;
-                    margin-bottom: 20px;
-                }
-                
-                .unit-card-dynamic {
-                    background: white;
-                    border-radius: 10px;
-                    border: 2px solid #e9ecef;
-                    padding: 20px;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    position: relative;
-                    min-height: 140px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                    text-align: center;
-                }
-                
-                .unit-card-dynamic:hover {
-                    transform: translateY(-3px);
-                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-                }
-                
-                .unit-card-dynamic.occupied {
-                    border-color: var(--success);
-                    background: linear-gradient(135deg, rgba(52, 168, 83, 0.05) 0%, white 100%);
-                }
-                
-                .unit-card-dynamic.vacant {
-                    border-color: #e9ecef;
-                    background: linear-gradient(135deg, #f8f9fa 0%, white 100%);
-                }
-                
-                .unit-card-dynamic .unit-number {
-                    font-size: 1.5rem;
-                    font-weight: 700;
-                    color: var(--royal-blue);
-                    margin-bottom: 8px;
-                }
-                
-                .unit-card-dynamic.occupied .unit-number {
-                    color: var(--success);
-                }
-                
-                .unit-status {
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    padding: 4px 12px;
-                    border-radius: 20px;
-                    margin-bottom: 10px;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                }
-                
-                .unit-status.occupied {
-                    background: rgba(52, 168, 83, 0.1);
-                    color: var(--success);
-                    border: 1px solid rgba(52, 168, 83, 0.3);
-                }
-                
-                .unit-status.vacant {
-                    background: rgba(220, 53, 69, 0.1);
-                    color: #dc3545;
-                    border: 1px solid rgba(220, 53, 69, 0.3);
-                }
-                
-                .unit-details {
-                    font-size: 0.85rem;
-                    color: var(--dark-gray);
-                    margin-top: 5px;
-                }
-                
-                .unit-rent {
-                    font-size: 0.9rem;
-                    font-weight: 600;
-                    color: var(--royal-blue);
-                    margin-top: 8px;
-                }
-                
-                .unit-badge {
-                    position: absolute;
-                    top: 10px;
-                    right: 10px;
-                    width: 10px;
-                    height: 10px;
-                    border-radius: 50%;
-                }
-                
-                .unit-badge.occupied {
-                    background: var(--success);
-                    box-shadow: 0 0 0 3px rgba(52, 168, 83, 0.2);
-                }
-                
-                .unit-badge.vacant {
-                    background: #e9ecef;
-                    border: 1px solid #dc3545;
-                }
-                
-                .floor-badge {
-                    background: var(--royal-blue);
-                    color: white;
-                    padding: 2px 10px;
-                    border-radius: 12px;
-                    font-size: 0.8rem;
-                    font-weight: 600;
-                    margin-left: 10px;
-                }
-                
-                @media (max-width: 768px) {
+                <style>
+                    .dynamic-unit-layout {
+                        padding: 10px;
+                    }
+                    
+                    .floor-section {
+                        margin-bottom: 40px;
+                    }
+                    
+                    .floor-title {
+                        font-size: 1.2rem;
+                        font-weight: 600;
+                        color: var(--royal-blue);
+                        margin-bottom: 20px;
+                        padding-bottom: 10px;
+                        border-bottom: 2px solid var(--royal-blue);
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+                    
                     .unit-grid-dynamic {
-                        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-                        gap: 12px;
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                        gap: 15px;
+                        margin-bottom: 20px;
                     }
                     
                     .unit-card-dynamic {
-                        padding: 15px;
-                        min-height: 120px;
+                        background: white;
+                        border-radius: 10px;
+                        border: 2px solid #e9ecef;
+                        padding: 20px;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                        position: relative;
+                        min-height: 140px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        text-align: center;
+                    }
+                    
+                    .unit-card-dynamic:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+                    }
+                    
+                    .unit-card-dynamic.occupied {
+                        border-color: var(--success);
+                        background: linear-gradient(135deg, rgba(52, 168, 83, 0.05) 0%, white 100%);
+                    }
+                    
+                    .unit-card-dynamic.vacant {
+                        border-color: #e9ecef;
+                        background: linear-gradient(135deg, #f8f9fa 0%, white 100%);
+                    }
+                    
+                    .unit-card-dynamic .unit-number {
+                        font-size: 1.5rem;
+                        font-weight: 700;
+                        color: var(--royal-blue);
+                        margin-bottom: 8px;
+                    }
+                    
+                    .unit-card-dynamic.occupied .unit-number {
+                        color: var(--success);
+                    }
+                    
+                    .unit-status {
+                        font-size: 0.85rem;
+                        font-weight: 600;
+                        padding: 4px 12px;
+                        border-radius: 20px;
+                        margin-bottom: 10px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    
+                    .unit-status.occupied {
+                        background: rgba(52, 168, 83, 0.1);
+                        color: var(--success);
+                        border: 1px solid rgba(52, 168, 83, 0.3);
+                    }
+                    
+                    .unit-status.vacant {
+                        background: rgba(220, 53, 69, 0.1);
+                        color: #dc3545;
+                        border: 1px solid rgba(220, 53, 69, 0.3);
+                    }
+                    
+                    .unit-details {
+                        font-size: 0.85rem;
+                        color: var(--dark-gray);
+                        margin-top: 5px;
+                    }
+                    
+                    .unit-rent {
+                        font-size: 0.9rem;
+                        font-weight: 600;
+                        color: var(--royal-blue);
+                        margin-top: 8px;
+                    }
+                    
+                    .unit-badge {
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        width: 10px;
+                        height: 10px;
+                        border-radius: 50%;
+                    }
+                    
+                    .unit-badge.occupied {
+                        background: var(--success);
+                        box-shadow: 0 0 0 3px rgba(52, 168, 83, 0.2);
+                    }
+                    
+                    .unit-badge.vacant {
+                        background: #e9ecef;
+                        border: 1px solid #dc3545;
+                    }
+                    
+                    .floor-badge {
+                        background: var(--royal-blue);
+                        color: white;
+                        padding: 2px 10px;
+                        border-radius: 12px;
+                        font-size: 0.8rem;
+                        font-weight: 600;
+                        margin-left: 10px;
+                    }
+                    
+                    @media (max-width: 768px) {
+                        .unit-grid-dynamic {
+                            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                            gap: 12px;
+                        }
+                        
+                        .unit-card-dynamic {
+                            padding: 15px;
+                            min-height: 120px;
+                        }
+                        
+                        .unit-number {
+                            font-size: 1.3rem;
+                        }
+                    }
+                </style>
+            `;
+        } else if (layoutType === 'dashboard') {
+            // Dashboard Layout with tabs and stat cards
+            layoutHTML = `
+                <div class="unit-layout-dashboard">
+                    <!-- Dashboard Header -->
+                    <div class="dashboard-header" style="margin-bottom: 30px;">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h5 style="margin: 0; font-weight: 600;">Apartment Unit Layout</h5>
+                                <p style="margin: 5px 0 0 0; color: var(--gray-600); font-size: 0.9rem;">
+                                    ${totalUnits} units across ${sortedFloors.length} floors
+                                    <span class="realtime-indicator" style="margin-left: 10px;">
+                                        <i class="fas fa-circle text-success" style="font-size: 0.7rem;"></i>
+                                        <span style="font-size: 0.8rem; margin-left: 5px;">Real-time updates active</span>
+                                    </span>
+                                </p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <div class="status-legend" style="display: inline-flex; gap: 15px; flex-wrap: wrap; justify-content: flex-end;">
+                                    <div class="legend-item">
+                                        <span class="status-dot" style="background-color: #28a745;"></span>
+                                        <span>Occupied</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="status-dot" style="background-color: #dc3545;"></span>
+                                        <span>Vacant</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="status-dot" style="background-color: #ffc107;"></span>
+                                        <span>Maintenance</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <span class="status-dot" style="background-color: #17a2b8;"></span>
+                                        <span>Reserved</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Statistics Cards -->
+                    <div class="row mb-4">
+                        <div class="col-xl-3 col-md-6 mb-3">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #28a74515, #28a74505);">
+                                <div class="stat-icon" style="background-color: #28a74520; color: #28a745;">
+                                    <i class="fas fa-home"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="occupiedUnitsStat">${occupiedUnits}</div>
+                                    <div class="stat-label">Occupied Units</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-3 col-md-6 mb-3">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #dc354515, #dc354505);">
+                                <div class="stat-icon" style="background-color: #dc354520; color: #dc3545;">
+                                    <i class="fas fa-door-open"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="vacantUnitsStat">${vacantUnits}</div>
+                                    <div class="stat-label">Vacant Units</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-3 col-md-6 mb-3">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #ffc10715, #ffc10705);">
+                                <div class="stat-icon" style="background-color: #ffc10720; color: #ffc107;">
+                                    <i class="fas fa-tools"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="maintenanceUnitsStat">${maintenanceUnits}</div>
+                                    <div class="stat-label">Under Maintenance</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-3 col-md-6 mb-3">
+                            <div class="stat-card" style="background: linear-gradient(135deg, #17a2b815, #17a2b805);">
+                                <div class="stat-icon" style="background-color: #17a2b820; color: #17a2b8;">
+                                    <i class="fas fa-calendar-check"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <div class="stat-value" id="reservedUnitsStat">${reservedUnits}</div>
+                                    <div class="stat-label">Reserved Units</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Floor Navigation Tabs -->
+                    <div class="floor-navigation mb-4">
+                        <ul class="nav nav-tabs" id="floorTabs" role="tablist">
+                            ${sortedFloors.map((floor, index) => `
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link ${index === 0 ? 'active' : ''}" 
+                                            id="floor-${floor}-tab" 
+                                            data-bs-toggle="tab" 
+                                            data-bs-target="#floor-${floor}" 
+                                            type="button" 
+                                            role="tab">
+                                        <i class="fas fa-building me-2"></i>
+                                        ${floor === 'Unknown' ? 'Unknown Floor' : `Floor ${floor}`}
+                                        <span class="badge bg-secondary ms-2">${unitsByFloor[floor].length}</span>
+                                    </button>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                    
+                    <!-- Floor Content -->
+                    <div class="tab-content" id="floorContent" style="min-height: 400px;">
+                        ${sortedFloors.map((floor, index) => `
+                            <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" 
+                                id="floor-${floor}" 
+                                role="tabpanel">
+                                ${this.generateFloorLayout(unitsByFloor[floor], floor)}
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <!-- Quick Actions -->
+                    <div class="quick-actions mt-4 pt-4 border-top">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-outline-primary" id="refreshUnitLayout">
+                                <i class="fas fa-sync-alt"></i> Refresh Layout
+                            </button>
+                            <button class="btn btn-outline-success" id="addNewUnitBtn">
+                                <i class="fas fa-plus"></i> Add New Unit
+                            </button>
+                            <button class="btn btn-outline-info" id="exportUnitData">
+                                <i class="fas fa-download"></i> Export Report
+                            </button>
+                            <button class="btn btn-outline-warning" id="unitAnalyticsBtn">
+                                <i class="fas fa-chart-bar"></i> View Analytics
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <style>
+                    .unit-layout-dashboard {
+                        padding: 5px;
+                    }
+                    
+                    .stat-card {
+                        border-radius: 12px;
+                        padding: 20px;
+                        border: 1px solid var(--border-color);
+                        display: flex;
+                        align-items: center;
+                        gap: 15px;
+                        transition: transform 0.2s, box-shadow 0.2s;
+                    }
+                    
+                    .stat-card:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                    }
+                    
+                    .stat-icon {
+                        width: 50px;
+                        height: 50px;
+                        border-radius: 12px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 1.5rem;
+                    }
+                    
+                    .stat-value {
+                        font-size: 1.8rem;
+                        font-weight: 700;
+                        line-height: 1;
+                    }
+                    
+                    .stat-label {
+                        color: var(--gray-600);
+                        font-size: 0.9rem;
+                        margin-top: 5px;
+                    }
+                    
+                    .status-legend {
+                        font-size: 0.85rem;
+                    }
+                    
+                    .legend-item {
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    }
+                    
+                    .status-dot {
+                        width: 10px;
+                        height: 10px;
+                        border-radius: 50%;
+                        display: inline-block;
+                    }
+                    
+                    .floor-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                        gap: 20px;
+                        padding: 15px 0;
+                    }
+                    
+                    .unit-card {
+                        border: 1px solid var(--border-color);
+                        border-radius: 10px;
+                        padding: 20px;
+                        transition: all 0.3s;
+                        cursor: pointer;
+                        position: relative;
+                    }
+                    
+                    .unit-card:hover {
+                        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                        transform: translateY(-2px);
+                    }
+                    
+                    .unit-card.occupied {
+                        border-left: 4px solid #28a745;
+                        background: linear-gradient(to right, #28a74508, transparent);
+                    }
+                    
+                    .unit-card.vacant {
+                        border-left: 4px solid #dc3545;
+                        background: linear-gradient(to right, #dc354508, transparent);
+                    }
+                    
+                    .unit-card.maintenance {
+                        border-left: 4px solid #ffc107;
+                        background: linear-gradient(to right, #ffc10708, transparent);
+                    }
+                    
+                    .unit-card.reserved {
+                        border-left: 4px solid #17a2b8;
+                        background: linear-gradient(to right, #17a2b808, transparent);
+                    }
+                    
+                    .unit-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: flex-start;
+                        margin-bottom: 15px;
                     }
                     
                     .unit-number {
-                        font-size: 1.3rem;
+                        font-size: 1.5rem;
+                        font-weight: 700;
+                        color: var(--text-color);
                     }
-                }
-            </style>
-        `;
+                    
+                    .unit-status-badge {
+                        padding: 4px 12px;
+                        border-radius: 20px;
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    
+                    .badge-occupied {
+                        background-color: #28a74520;
+                        color: #28a745;
+                        border: 1px solid #28a74530;
+                    }
+                    
+                    .badge-vacant {
+                        background-color: #dc354520;
+                        color: #dc3545;
+                        border: 1px solid #dc354530;
+                    }
+                    
+                    .badge-maintenance {
+                        background-color: #ffc10720;
+                        color: #ffc107;
+                        border: 1px solid #ffc10730;
+                    }
+                    
+                    .badge-reserved {
+                        background-color: #17a2b820;
+                        color: #17a2b8;
+                        border: 1px solid #17a2b830;
+                    }
+                    
+                    .unit-details {
+                        margin-top: 15px;
+                    }
+                    
+                    .detail-row {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 8px;
+                        font-size: 0.9rem;
+                    }
+                    
+                    .detail-label {
+                        color: var(--gray-600);
+                        font-weight: 500;
+                    }
+                    
+                    .detail-value {
+                        color: var(--text-color);
+                        font-weight: 600;
+                        text-align: right;
+                    }
+                    
+                    .tenant-name {
+                        color: var(--primary-color);
+                        font-weight: 600;
+                    }
+                    
+                    .unit-actions {
+                        display: flex;
+                        gap: 10px;
+                        margin-top: 15px;
+                        padding-top: 15px;
+                        border-top: 1px solid var(--border-color);
+                    }
+                    
+                    .action-btn {
+                        flex: 1;
+                        padding: 6px 12px;
+                        font-size: 0.8rem;
+                        border-radius: 6px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 5px;
+                        transition: all 0.2s;
+                        border: 1px solid transparent;
+                        cursor: pointer;
+                    }
+                    
+                    .action-btn:hover {
+                        transform: translateY(-1px);
+                    }
+                    
+                    .action-btn.view {
+                        background-color: #0d6efd;
+                        color: white;
+                    }
+                    
+                    .action-btn.view:hover {
+                        background-color: #0b5ed7;
+                    }
+                    
+                    .action-btn.edit {
+                        background-color: #198754;
+                        color: white;
+                    }
+                    
+                    .action-btn.edit:hover {
+                        background-color: #157347;
+                    }
+                    
+                    .action-btn.delete {
+                        background-color: #dc3545;
+                        color: white;
+                    }
+                    
+                    .action-btn.delete:hover {
+                        background-color: #bb2d3b;
+                    }
+                    
+                    /* Prevent action buttons from triggering card clicks */
+                    .unit-card .action-btn,
+                    .unit-card .action-btn * {
+                        pointer-events: auto !important;
+                    }
+                    
+                    .unit-card *:not(.action-btn):not(.action-btn *) {
+                        pointer-events: none;
+                    }
+                    
+                    @media (max-width: 768px) {
+                        .floor-grid {
+                            grid-template-columns: 1fr;
+                        }
+                        
+                        .stat-card {
+                            padding: 15px;
+                        }
+                        
+                        .stat-value {
+                            font-size: 1.5rem;
+                        }
+                    }
+                </style>
+            `;
+        }
         
+        // Update modal content
         modal.querySelector('.modal-body').innerHTML = layoutHTML;
-        console.log('✅ Dynamic layout generated successfully');
+        console.log(`✅ ${layoutType} layout generated successfully`);
+    }
+
+    generateDynamicUnitLayout(modal, units) {
+        console.log('🏗️ Generating dynamic unit layout...');
+        this.generateUnitLayout(units, modal, 'dynamic');
     }
 
     generateUnitLayoutDashboard(units, modal) {
         console.log('📊 Generating unit layout dashboard for', units.length, 'units');
-        
-        // Group units by floor
-        const floors = {};
-        units.forEach(unit => {
-            const floorNum = unit.floor || 'Unknown';
-            if (!floors[floorNum]) {
-                floors[floorNum] = [];
-            }
-            floors[floorNum].push(unit);
-        });
-        
-        // Sort floors numerically
-        const sortedFloors = Object.keys(floors).sort((a, b) => {
-            if (a === 'Unknown') return 1;
-            if (b === 'Unknown') return -1;
-            return parseInt(b) - parseInt(a); // Show higher floors first
-        });
-        
-        // Calculate counts
-        const occupiedCount = this.getUnitCountByStatus(units, 'occupied');
-        const vacantCount = this.getUnitCountByStatus(units, 'vacant');
-        const maintenanceCount = this.getUnitCountByStatus(units, 'maintenance');
-        const reservedCount = this.getUnitCountByStatus(units, 'reserved');
-        
-        // Create dashboard layout
-        const dashboardHTML = `
-            <div class="unit-layout-dashboard">
-                <!-- Dashboard Header -->
-                <div class="dashboard-header" style="margin-bottom: 30px;">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h5 style="margin: 0; font-weight: 600;">Apartment Unit Layout</h5>
-                            <p style="margin: 5px 0 0 0; color: var(--gray-600); font-size: 0.9rem;">
-                                ${units.length} units across ${sortedFloors.length} floors
-                                <span class="realtime-indicator" style="margin-left: 10px;">
-                                    <i class="fas fa-circle text-success" style="font-size: 0.7rem;"></i>
-                                    <span style="font-size: 0.8rem; margin-left: 5px;">Real-time updates active</span>
-                                </span>
-                            </p>
-                        </div>
-                        <div class="col-md-4 text-end">
-                            <div class="status-legend" style="display: inline-flex; gap: 15px; flex-wrap: wrap; justify-content: flex-end;">
-                                <div class="legend-item">
-                                    <span class="status-dot" style="background-color: #28a745;"></span>
-                                    <span>Occupied</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="status-dot" style="background-color: #dc3545;"></span>
-                                    <span>Vacant</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="status-dot" style="background-color: #ffc107;"></span>
-                                    <span>Maintenance</span>
-                                </div>
-                                <div class="legend-item">
-                                    <span class="status-dot" style="background-color: #17a2b8;"></span>
-                                    <span>Reserved</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Statistics Cards -->
-                <div class="row mb-4">
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="stat-card" style="background: linear-gradient(135deg, #28a74515, #28a74505);">
-                            <div class="stat-icon" style="background-color: #28a74520; color: #28a745;">
-                                <i class="fas fa-home"></i>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="occupiedUnitsStat">${occupiedCount}</div>
-                                <div class="stat-label">Occupied Units</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="stat-card" style="background: linear-gradient(135deg, #dc354515, #dc354505);">
-                            <div class="stat-icon" style="background-color: #dc354520; color: #dc3545;">
-                                <i class="fas fa-door-open"></i>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="vacantUnitsStat">${vacantCount}</div>
-                                <div class="stat-label">Vacant Units</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="stat-card" style="background: linear-gradient(135deg, #ffc10715, #ffc10705);">
-                            <div class="stat-icon" style="background-color: #ffc10720; color: #ffc107;">
-                                <i class="fas fa-tools"></i>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="maintenanceUnitsStat">${maintenanceCount}</div>
-                                <div class="stat-label">Under Maintenance</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-xl-3 col-md-6 mb-3">
-                        <div class="stat-card" style="background: linear-gradient(135deg, #17a2b815, #17a2b805);">
-                            <div class="stat-icon" style="background-color: #17a2b820; color: #17a2b8;">
-                                <i class="fas fa-calendar-check"></i>
-                            </div>
-                            <div class="stat-content">
-                                <div class="stat-value" id="reservedUnitsStat">${reservedCount}</div>
-                                <div class="stat-label">Reserved Units</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Floor Navigation Tabs -->
-                <div class="floor-navigation mb-4">
-                    <ul class="nav nav-tabs" id="floorTabs" role="tablist">
-                        ${sortedFloors.map((floor, index) => `
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link ${index === 0 ? 'active' : ''}" 
-                                        id="floor-${floor}-tab" 
-                                        data-bs-toggle="tab" 
-                                        data-bs-target="#floor-${floor}" 
-                                        type="button" 
-                                        role="tab">
-                                    <i class="fas fa-building me-2"></i>
-                                    ${floor === 'Unknown' ? 'Unknown Floor' : `Floor ${floor}`}
-                                    <span class="badge bg-secondary ms-2">${floors[floor].length}</span>
-                                </button>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-                
-                <!-- Floor Content -->
-                <div class="tab-content" id="floorContent" style="min-height: 400px;">
-                    ${sortedFloors.map((floor, index) => `
-                        <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" 
-                            id="floor-${floor}" 
-                            role="tabpanel">
-                            ${this.generateFloorLayout(floors[floor], floor)}
-                        </div>
-                    `).join('')}
-                </div>
-                
-                <!-- Quick Actions -->
-                <div class="quick-actions mt-4 pt-4 border-top">
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-outline-primary" id="refreshUnitLayout">
-                            <i class="fas fa-sync-alt"></i> Refresh Layout
-                        </button>
-                        <button class="btn btn-outline-success" id="addNewUnitBtn">
-                            <i class="fas fa-plus"></i> Add New Unit
-                        </button>
-                        <button class="btn btn-outline-info" id="exportUnitData">
-                            <i class="fas fa-download"></i> Export Report
-                        </button>
-                        <button class="btn btn-outline-warning" id="unitAnalyticsBtn">
-                            <i class="fas fa-chart-bar"></i> View Analytics
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <style>
-                .unit-layout-dashboard {
-                    padding: 5px;
-                }
-                
-                .stat-card {
-                    border-radius: 12px;
-                    padding: 20px;
-                    border: 1px solid var(--border-color);
-                    display: flex;
-                    align-items: center;
-                    gap: 15px;
-                    transition: transform 0.2s, box-shadow 0.2s;
-                }
-                
-                .stat-card:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-                }
-                
-                .stat-icon {
-                    width: 50px;
-                    height: 50px;
-                    border-radius: 12px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 1.5rem;
-                }
-                
-                .stat-value {
-                    font-size: 1.8rem;
-                    font-weight: 700;
-                    line-height: 1;
-                }
-                
-                .stat-label {
-                    color: var(--gray-600);
-                    font-size: 0.9rem;
-                    margin-top: 5px;
-                }
-                
-                .status-legend {
-                    font-size: 0.85rem;
-                }
-                
-                .legend-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                }
-                
-                .status-dot {
-                    width: 10px;
-                    height: 10px;
-                    border-radius: 50%;
-                    display: inline-block;
-                }
-                
-                .floor-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                    gap: 20px;
-                    padding: 15px 0;
-                }
-                
-                .unit-card {
-                    border: 1px solid var(--border-color);
-                    border-radius: 10px;
-                    padding: 20px;
-                    transition: all 0.3s;
-                    cursor: pointer;
-                    position: relative;
-                }
-                
-                .unit-card:hover {
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-                    transform: translateY(-2px);
-                }
-                
-                .unit-card.occupied {
-                    border-left: 4px solid #28a745;
-                    background: linear-gradient(to right, #28a74508, transparent);
-                }
-                
-                .unit-card.vacant {
-                    border-left: 4px solid #dc3545;
-                    background: linear-gradient(to right, #dc354508, transparent);
-                }
-                
-                .unit-card.maintenance {
-                    border-left: 4px solid #ffc107;
-                    background: linear-gradient(to right, #ffc10708, transparent);
-                }
-                
-                .unit-card.reserved {
-                    border-left: 4px solid #17a2b8;
-                    background: linear-gradient(to right, #17a2b808, transparent);
-                }
-                
-                .unit-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: flex-start;
-                    margin-bottom: 15px;
-                }
-                
-                .unit-number {
-                    font-size: 1.5rem;
-                    font-weight: 700;
-                    color: var(--text-color);
-                }
-                
-                .unit-status-badge {
-                    padding: 4px 12px;
-                    border-radius: 20px;
-                    font-size: 0.75rem;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                }
-                
-                .badge-occupied {
-                    background-color: #28a74520;
-                    color: #28a745;
-                    border: 1px solid #28a74530;
-                }
-                
-                .badge-vacant {
-                    background-color: #dc354520;
-                    color: #dc3545;
-                    border: 1px solid #dc354530;
-                }
-                
-                .badge-maintenance {
-                    background-color: #ffc10720;
-                    color: #ffc107;
-                    border: 1px solid #ffc10730;
-                }
-                
-                .badge-reserved {
-                    background-color: #17a2b820;
-                    color: #17a2b8;
-                    border: 1px solid #17a2b830;
-                }
-                
-                .unit-details {
-                    margin-top: 15px;
-                }
-                
-                .detail-row {
-                    display: flex;
-                    justify-content: space-between;
-                    margin-bottom: 8px;
-                    font-size: 0.9rem;
-                }
-                
-                .detail-label {
-                    color: var(--gray-600);
-                    font-weight: 500;
-                }
-                
-                .detail-value {
-                    color: var(--text-color);
-                    font-weight: 600;
-                    text-align: right;
-                }
-                
-                .tenant-name {
-                    color: var(--primary-color);
-                    font-weight: 600;
-                }
-                
-                .unit-actions {
-                    display: flex;
-                    gap: 10px;
-                    margin-top: 15px;
-                    padding-top: 15px;
-                    border-top: 1px solid var(--border-color);
-                }
-                
-                .action-btn {
-                    flex: 1;
-                    padding: 6px 12px;
-                    font-size: 0.8rem;
-                    border-radius: 6px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 5px;
-                    transition: all 0.2s;
-                    border: 1px solid transparent;
-                    cursor: pointer;
-                }
-                
-                .action-btn:hover {
-                    transform: translateY(-1px);
-                }
-                
-                .action-btn.view {
-                    background-color: #0d6efd;
-                    color: white;
-                }
-                
-                .action-btn.view:hover {
-                    background-color: #0b5ed7;
-                }
-                
-                .action-btn.edit {
-                    background-color: #198754;
-                    color: white;
-                }
-                
-                .action-btn.edit:hover {
-                    background-color: #157347;
-                }
-                
-                .action-btn.delete {
-                    background-color: #dc3545;
-                    color: white;
-                }
-                
-                .action-btn.delete:hover {
-                    background-color: #bb2d3b;
-                }
-                
-                /* Prevent action buttons from triggering card clicks */
-                .unit-card .action-btn,
-                .unit-card .action-btn * {
-                    pointer-events: auto !important;
-                }
-                
-                .unit-card *:not(.action-btn):not(.action-btn *) {
-                    pointer-events: none;
-                }
-                
-                @media (max-width: 768px) {
-                    .floor-grid {
-                        grid-template-columns: 1fr;
-                    }
-                    
-                    .stat-card {
-                        padding: 15px;
-                    }
-                    
-                    .stat-value {
-                        font-size: 1.5rem;
-                    }
-                }
-            </style>
-        `;
-        
-        // Update modal content
-        modal.querySelector('.modal-body').innerHTML = dashboardHTML;
-        
-        console.log('✅ Dashboard HTML generated');
-        
-        // Note: Click handlers will be set up in showUnitLayoutDashboard method
-        // via setupUnitClickHandlers() for better management
+        this.generateUnitLayout(units, modal, 'dashboard');
     }
 
     generateFloorLayout(units, floorNumber) {
@@ -4470,75 +3816,8 @@ class CasaLink {
     }
 
     // Debug function to test unit clicks
-    debugUnitClicks() {
-        console.log('🐛 Debugging unit clicks...');
-        
-        // Get the unit layout modal
-        const modal = document.querySelector('.modal.show');
-        if (!modal) {
-            console.log('❌ No modal found. Open the unit layout first.');
-            return;
-        }
-        
-        // Check unit cells
-        const unitCells = modal.querySelectorAll('.unit-cell-grid');
-        console.log(`🔍 Found ${unitCells.length} unit cells`);
-        
-        unitCells.forEach((cell, index) => {
-            console.log(`Cell ${index + 1}:`, {
-                roomNumber: cell.dataset.roomNumber,
-                unitId: cell.dataset.unitId,
-                status: cell.dataset.status,
-                hasClickListener: cell.hasAttribute('data-click-bound')
-            });
-        });
-        
-        // Test click simulation on first occupied unit
-        const firstOccupied = modal.querySelector('.unit-cell-grid[data-status="occupied"]');
-        if (firstOccupied) {
-            console.log('🧪 Simulating click on first occupied unit:', firstOccupied.dataset.roomNumber);
-            setTimeout(() => {
-                firstOccupied.click();
-            }, 1000);
-        }
-    }
-
     // Function to test Firestore data
-    async testFirestoreData() {
-        console.log('🧪 Testing Firestore data...');
-        
-        try {
-            // Get all rooms
-            const querySnapshot = await firebaseDb.collection('rooms').get();
-            console.log(`📊 Total rooms in Firestore: ${querySnapshot.size}`);
-            
-            querySnapshot.forEach(doc => {
-                const room = doc.data();
-                console.log(`   - ${room.roomNumber}: isAvailable=${room.isAvailable}, occupiedBy=${room.occupiedBy || 'none'}`);
-            });
-            
-            // Check specific rooms
-            const roomsToCheck = ['1A', '1B', '2A', '5A'];
-            for (const roomNumber of roomsToCheck) {
-                const query = await firebaseDb.collection('rooms')
-                    .where('roomNumber', '==', roomNumber)
-                    .limit(1)
-                    .get();
-                
-                if (!query.empty) {
-                    const room = query.docs[0].data();
-                    console.log(`✅ ${roomNumber}: exists, isAvailable=${room.isAvailable}`);
-                } else {
-                    console.log(`❌ ${roomNumber}: does not exist in Firestore`);
-                }
-            }
-            
-        } catch (error) {
-            console.error('❌ Error testing Firestore:', error);
-        }
-    }
-
-    setupUnitClickHandlers(modal) {
+    async setupUnitClickHandlers(modal) {
         const unitCards = modal.querySelectorAll('.unit-card-dynamic');
         console.log(`🖱️ Setting up click handlers for ${unitCards.length} unit cards`);
         
@@ -5171,22 +4450,6 @@ class CasaLink {
                 break;
         }
     }
-
-    async loadPaymentStats() {
-        try {
-            const stats = await DataManager.getPaymentStats(this.currentUser.uid);
-            
-            this.updateCard('totalCollected', `₱${stats.totalCollected.toLocaleString()}`);
-            this.updateCard('monthlyCollected', `₱${stats.monthlyCollected.toLocaleString()}`);
-            this.updateCard('totalTransactions', stats.totalTransactions);
-            this.updateCard('averagePayment', `₱${Math.round(stats.averagePayment).toLocaleString()}`);
-            
-        } catch (error) {
-            console.error('Error loading payment stats:', error);
-        }
-    }
-
-
 
     async showLeaseAgreement() {
         try {
@@ -14899,8 +14162,8 @@ class CasaLink {
                 this.showLeaseDetailsModal(id);
                 return;
             }
-            if (typeof this.showLeaseDetailsModalFromActivity === 'function') {
-                this.showLeaseDetailsModalFromActivity(id);
+            if (typeof this.showActivityDetailsModal === 'function') {
+                this.showActivityDetailsModal('new_lease', id);
                 return;
             }
 
@@ -18210,55 +17473,6 @@ window.testAppBinding = function() {
         console.log('showUnitDetails available:', 
             typeof window.app.showUnitDetails === 'function');
     }
-};
-
-window.testFirestoreData = async function() {
-    console.log('🧪 Testing Firestore data...');
-    
-    try {
-        const roomsSnapshot = await firebaseDb.collection('rooms').get();
-        console.log(`📊 Total rooms in Firestore: ${roomsSnapshot.size}`);
-        
-        if (roomsSnapshot.size === 0) {
-            console.log('❌ No rooms found in Firestore!');
-            alert('No rooms found in Firestore!');
-            return;
-        }
-        
-        console.log('📋 Rooms in Firestore:');
-        roomsSnapshot.forEach(doc => {
-            const room = doc.data();
-            console.log(`   - ${doc.id}: ${room.roomNumber} (Floor: ${room.floor}, Available: ${room.isAvailable})`);
-        });
-        
-        // Show alert with summary
-        alert(`Found ${roomsSnapshot.size} rooms in Firestore. Check console for details.`);
-        
-    } catch (error) {
-        console.error('❌ Error testing Firestore:', error);
-        alert('Error testing Firestore: ' + error.message);
-    }
-};
-
-window.debugUnitLayout = function() {
-    console.log('🐛 Debugging unit layout...');
-    
-    const modal = document.querySelector('.modal.show');
-    if (!modal) {
-        console.log('❌ No unit layout modal open');
-        return;
-    }
-    
-    const unitCards = modal.querySelectorAll('.unit-card-dynamic');
-    console.log(`🔍 Found ${unitCards.length} unit cards in layout`);
-    
-    unitCards.forEach((card, index) => {
-        console.log(`Card ${index + 1}:`, {
-            unitId: card.dataset.unitId,
-            roomNumber: card.dataset.roomNumber,
-            status: card.dataset.status
-        });
-    });
 };
 
 // Initialize the app when DOM is loaded

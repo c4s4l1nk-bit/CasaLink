@@ -1,0 +1,502 @@
+<!-- views/maintenance/list.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink - Maintenance</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .maintenance-container {
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .page-header h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .btn-primary {
+            padding: 10px 20px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-primary:hover {
+            background: #1565c0;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .summary-card-label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .summary-card-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a73e8;
+        }
+
+        .summary-card.urgent .summary-card-value {
+            color: #ef4444;
+        }
+
+        .summary-card.in-progress .summary-card-value {
+            color: #f59e0b;
+        }
+
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-box input,
+        .filter-select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .search-box input {
+            width: 100%;
+        }
+
+        .requests-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .request-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #1a73e8;
+        }
+
+        .request-card.urgent {
+            border-left-color: #ef4444;
+            background: #fffbfb;
+        }
+
+        .request-card.high {
+            border-left-color: #f59e0b;
+        }
+
+        .request-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .request-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .request-badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge.urgent {
+            background: #fee2e2;
+            color: #ef4444;
+        }
+
+        .badge.high {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .badge.medium {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge.low {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge.open {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .badge.in-progress {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge.closed {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .request-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .request-description {
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .request-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-action {
+            padding: 8px 16px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .btn-action:hover {
+            background: #1565c0;
+        }
+
+        .btn-action.secondary {
+            background: #666;
+        }
+
+        .btn-action.secondary:hover {
+            background: #555;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .error-message {
+            display: none;
+            color: #ef4444;
+            background: #fee2e2;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="maintenance-page">
+    <div class="maintenance-container">
+        <div class="page-header">
+            <h1>Maintenance Requests</h1>
+            <button class="btn-primary" id="createRequestBtn">+ New Request</button>
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+
+        <div class="summary-cards">
+            <div class="summary-card">
+                <div class="summary-card-label">Total</div>
+                <div class="summary-card-value" id="totalRequests">0</div>
+            </div>
+            <div class="summary-card urgent">
+                <div class="summary-card-label">Urgent</div>
+                <div class="summary-card-value" id="urgentCount">0</div>
+            </div>
+            <div class="summary-card in-progress">
+                <div class="summary-card-label">In Progress</div>
+                <div class="summary-card-value" id="inProgressCount">0</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-label">Closed</div>
+                <div class="summary-card-value" id="closedCount">0</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="search-box">
+                <input 
+                    id="requestSearch" 
+                    type="text" 
+                    placeholder="Search requests..." 
+                    autocomplete="off"
+                >
+            </div>
+            <select id="priorityFilter" class="filter-select">
+                <option value="">All Priority</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+            <select id="statusFilter" class="filter-select">
+                <option value="">All Status</option>
+                <option value="open">Open</option>
+                <option value="in-progress">In Progress</option>
+                <option value="closed">Closed</option>
+            </select>
+        </div>
+
+        <div class="loading" id="loadingIndicator">Loading requests...</div>
+
+        <div id="requestsList" class="requests-list">
+            <div class="empty-state">
+                <p>No maintenance requests</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // MAINTENANCE LIST VIEW - Event Listeners Only
+        // ============================================
+        // NO LOGIC HERE - Controller handles everything
+
+        // Load requests on page load
+        if (window.maintenanceController) {
+            window.maintenanceController.init();
+        }
+
+        // Create request button
+        document.getElementById('createRequestBtn')?.addEventListener('click', () => {
+            if (window.maintenanceController) {
+                window.maintenanceController.openCreateRequestModal();
+            }
+        });
+
+        // Search requests
+        let searchTimeout;
+        document.getElementById('requestSearch')?.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                if (window.maintenanceController) {
+                    window.maintenanceController.searchRequests(e.target.value);
+                }
+            }, 300);
+        });
+
+        // Filter by priority
+        document.getElementById('priorityFilter')?.addEventListener('change', (e) => {
+            if (window.maintenanceController) {
+                window.maintenanceController.filterByPriority(e.target.value);
+            }
+        });
+
+        // Filter by status
+        document.getElementById('statusFilter')?.addEventListener('change', (e) => {
+            if (window.maintenanceController) {
+                window.maintenanceController.filterByStatus(e.target.value);
+            }
+        });
+
+        // Helper: Display requests
+        window.displayMaintenanceRequests = function(requests) {
+            const container = document.getElementById('requestsList');
+            if (!container) return;
+
+            if (!requests || requests.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <p>No maintenance requests</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            requests.forEach(request => {
+                const priorityClass = request.priority.toLowerCase();
+                const statusClass = request.status.toLowerCase().replace(' ', '-');
+
+                html += `
+                    <div class="request-card ${priorityClass}" data-request-id="${request.id}">
+                        <div class="request-header">
+                            <h3 class="request-title">${request.title}</h3>
+                            <div class="request-badges">
+                                <span class="badge ${priorityClass}">${request.priority}</span>
+                                <span class="badge ${statusClass}">${request.status}</span>
+                            </div>
+                        </div>
+                        <div class="request-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Property</span>
+                                <span class="detail-value">${request.propertyName}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Unit</span>
+                                <span class="detail-value">${request.unitNumber}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Submitted</span>
+                                <span class="detail-value">${request.submittedDate}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Reported By</span>
+                                <span class="detail-value">${request.reportedBy}</span>
+                            </div>
+                        </div>
+                        <div class="request-description">${request.description}</div>
+                        <div class="request-actions">
+                            <button class="btn-action view-btn">View Details</button>
+                            ${request.status !== 'Closed' ? '<button class="btn-action secondary update-btn">Update Status</button>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+
+            // Add event listeners
+            container.querySelectorAll('.request-card').forEach(card => {
+                const requestId = card.getAttribute('data-request-id');
+
+                card.querySelector('.view-btn')?.addEventListener('click', () => {
+                    if (window.maintenanceController) {
+                        window.maintenanceController.viewRequest(requestId);
+                    }
+                });
+
+                card.querySelector('.update-btn')?.addEventListener('click', () => {
+                    if (window.maintenanceController) {
+                        window.maintenanceController.openUpdateStatusModal(requestId);
+                    }
+                });
+            });
+        };
+
+        // Helper: Update summary stats
+        window.updateMaintenanceStats = function(stats) {
+            if (stats.total !== undefined) {
+                const el = document.getElementById('totalRequests');
+                if (el) el.textContent = stats.total;
+            }
+            if (stats.urgent !== undefined) {
+                const el = document.getElementById('urgentCount');
+                if (el) el.textContent = stats.urgent;
+            }
+            if (stats.inProgress !== undefined) {
+                const el = document.getElementById('inProgressCount');
+                if (el) el.textContent = stats.inProgress;
+            }
+            if (stats.closed !== undefined) {
+                const el = document.getElementById('closedCount');
+                if (el) el.textContent = stats.closed;
+            }
+        };
+
+        // Helper: Show/hide loading
+        window.setMaintenanceLoading = function(isLoading) {
+            const loading = document.getElementById('loadingIndicator');
+            if (loading) {
+                isLoading ? loading.classList.add('show') : loading.classList.remove('show');
+            }
+        };
+
+        // Helper: Show error
+        window.showMaintenanceError = function(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.textContent = message;
+                errorDiv.classList.add('show');
+            }
+        };
+
+        // Helper: Hide error
+        window.hideMaintenanceError = function() {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.classList.remove('show');
+            }
+        };
+    </script>
+</body>
+</html>

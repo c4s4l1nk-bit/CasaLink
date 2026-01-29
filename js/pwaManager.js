@@ -339,16 +339,37 @@ class PWAManager {
 
                 // Track installation state safely
                 if (registration.installing) {
-                    await new Promise((resolve, reject) => {
+                    await new Promise((resolve) => {
                         const worker = registration.installing;
                         if (!worker) return resolve();
-                        worker.addEventListener('statechange', () => {
+
+                        const onStateChange = () => {
                             console.log('🔧 Service Worker state:', worker.state);
-                            if (worker.state === 'activated') resolve();
-                            if (worker.state === 'redundant') reject(new Error('Service Worker redundant'));
-                        });
-                        setTimeout(() => resolve(), 10000);
-                    }).catch(err => console.warn('SW installing promise rejected:', err));
+                            // Consider activated/installed as success; treat redundant as non-fatal
+                            if (worker.state === 'activated' || worker.state === 'installed') {
+                                cleanup();
+                                return resolve();
+                            }
+                            if (worker.state === 'redundant') {
+                                console.warn('⚠️ Service Worker became redundant during install — continuing without error');
+                                cleanup();
+                                return resolve();
+                            }
+                        };
+
+                        const cleanup = () => {
+                            try { worker.removeEventListener('statechange', onStateChange); } catch (e) {}
+                        };
+
+                        worker.addEventListener('statechange', onStateChange);
+
+                        // Fallback timeout to avoid hanging indefinitely
+                        setTimeout(() => {
+                            console.warn('⚠️ SW install wait timed out — continuing');
+                            cleanup();
+                            resolve();
+                        }, 10000);
+                    }).catch(err => console.warn('SW installing promise warning (non-fatal):', err));
                 } else if (registration.active) {
                     console.log('✅ Service Worker already active');
                 }

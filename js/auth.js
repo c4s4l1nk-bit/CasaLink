@@ -453,12 +453,29 @@ class AuthManager {
     }
 
     static syncUserToDataManager(userData) {
+        // Set window.currentUser FIRST
+        window.currentUser = userData;
+        console.log('✅ window.currentUser set:', userData ? userData.email : 'null');
+        
         // DataManager sync is informational only - auth doesn't depend on it
         if (window.DataManager) {
             console.log('✅ User data available in DataManager context:', userData ? userData.email : 'null');
-            // Store user info in DataManager currentUser if available
-            if (window.DataManager && typeof window.DataManager.currentUser !== 'undefined') {
-                window.DataManager.currentUser = userData;
+            // Store user info in DataManager currentUser and user if available
+            try {
+                if (typeof window.DataManager.currentUser !== 'undefined') {
+                    window.DataManager.currentUser = userData;
+                }
+                // Some older DataManager methods expect `DataManager.user` and `DataManager.db`
+                window.DataManager.user = userData;
+                if (userData) {
+                    if (!window.DataManager.db) {
+                        window.DataManager.db = firebase.firestore();
+                    }
+                } else {
+                    window.DataManager.db = null;
+                }
+            } catch (e) {
+                console.warn('⚠️ Failed to sync user to DataManager internals:', e);
             }
         } else {
             console.warn('⚠️ DataManager not yet available (non-critical)');

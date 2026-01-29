@@ -265,7 +265,8 @@
         (function() {
             const CACHE_BUSTER = 'v=1.0.4-' + new Date().getTime();
             const scripts = [
-                'config/firebase.js',      // Firebase config FIRST
+                'js/mvcBootstrap.js',      // MVC bootstrap FIRST - initializes services & controllers
+                'config/firebase.js',      // Firebase config (kept for compatibility)
                 'js/dataManager.js',       // DataManager SECOND - MUST be before auth
                 'js/auth.js',              // Auth THIRD - needs DataManager
                 'js/sendpulseService.js',

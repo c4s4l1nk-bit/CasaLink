@@ -1,0 +1,347 @@
+<!-- views/properties/detail.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink - Property Details</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .property-detail-container {
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 20px;
+        }
+
+        .detail-header h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: #1a73e8;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1565c0;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .detail-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .detail-section h2 {
+            color: #333;
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+
+        .detail-row {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .detail-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .units-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .unit-card {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #1a73e8;
+            cursor: pointer;
+        }
+
+        .unit-card:hover {
+            background: #f0f0f0;
+        }
+
+        .unit-number {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .unit-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+
+        .unit-status.occupied {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .unit-status.vacant {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .back-btn {
+            padding: 8px 16px;
+            background: #666;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+
+        .back-btn:hover {
+            background: #555;
+        }
+
+        .error-message {
+            display: none;
+            color: #ef4444;
+            background: #fee2e2;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body class="property-detail-page">
+    <div class="property-detail-container">
+        <button class="back-btn" id="backBtn">← Back to Properties</button>
+
+        <div id="errorMessage" class="error-message"></div>
+
+        <div class="detail-header">
+            <div>
+                <h1 id="propertyName">Property Name</h1>
+                <p id="propertyAddress" style="color: #666; margin: 5px 0;">Address</p>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="editBtn">Edit</button>
+                <button class="btn btn-secondary" id="deleteBtn">Delete</button>
+            </div>
+        </div>
+
+        <div class="detail-grid">
+            <div class="detail-section">
+                <h2>Property Information</h2>
+                <div class="detail-row">
+                    <div class="detail-label">Type</div>
+                    <div class="detail-value" id="propertyType">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Address</div>
+                    <div class="detail-value" id="address">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">City</div>
+                    <div class="detail-value" id="city">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Postal Code</div>
+                    <div class="detail-value" id="postalCode">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Owner</div>
+                    <div class="detail-value" id="owner">-</div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h2>Statistics</h2>
+                <div class="detail-row">
+                    <div class="detail-label">Total Units</div>
+                    <div class="detail-value" id="totalUnits">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Occupied Units</div>
+                    <div class="detail-value" id="occupiedUnits">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Occupancy Rate</div>
+                    <div class="detail-value" id="occupancyRate">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Monthly Revenue</div>
+                    <div class="detail-value" id="monthlyRevenue">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Created</div>
+                    <div class="detail-value" id="createdDate">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h2>Units</h2>
+            <div class="units-grid" id="unitsList">
+                <div class="loading">Loading units...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // PROPERTY DETAIL VIEW - Event Listeners Only
+        // ============================================
+
+        const propertyId = new URLSearchParams(window.location.search).get('id') ||
+                          window.location.hash.split('/')[1];
+
+        // Load property detail
+        if (window.propertiesController) {
+            loadPropertyDetail();
+        }
+
+        async function loadPropertyDetail() {
+            try {
+                if (!propertyId || !window.dataService) return;
+
+                const property = await window.dataService.getProperty(propertyId);
+                if (property) {
+                    displayPropertyDetail(property);
+                }
+            } catch (error) {
+                console.error('Error loading property:', error);
+                showError(error.message);
+            }
+        }
+
+        // Back button
+        document.getElementById('backBtn')?.addEventListener('click', () => {
+            window.location.hash = '#properties';
+        });
+
+        // Edit button
+        document.getElementById('editBtn')?.addEventListener('click', () => {
+            if (window.propertiesController) {
+                window.propertiesController.openEditPropertyModal(propertyId);
+            }
+        });
+
+        // Delete button
+        document.getElementById('deleteBtn')?.addEventListener('click', () => {
+            if (confirm('Are you sure you want to delete this property?')) {
+                if (window.propertiesController) {
+                    window.propertiesController.deleteProperty(propertyId);
+                    setTimeout(() => {
+                        window.location.hash = '#properties';
+                    }, 1000);
+                }
+            }
+        });
+
+        // Helper: Display property details
+        window.displayPropertyDetail = function(property) {
+            document.getElementById('propertyName').textContent = property.name;
+            document.getElementById('propertyAddress').textContent = property.address;
+            document.getElementById('propertyType').textContent = property.type || 'N/A';
+            document.getElementById('address').textContent = property.address;
+            document.getElementById('city').textContent = property.city || 'N/A';
+            document.getElementById('postalCode').textContent = property.postalCode || 'N/A';
+            document.getElementById('owner').textContent = property.ownerName || 'N/A';
+            document.getElementById('totalUnits').textContent = property.units?.length || 0;
+            document.getElementById('occupiedUnits').textContent = property.occupiedUnits || 0;
+            document.getElementById('occupancyRate').textContent = `${property.occupancyRate || 0}%`;
+            document.getElementById('monthlyRevenue').textContent = `$${(property.monthlyRevenue || 0).toFixed(2)}`;
+            document.getElementById('createdDate').textContent = property.createdDate || 'N/A';
+
+            // Display units
+            const unitsList = document.getElementById('unitsList');
+            if (property.units && property.units.length > 0) {
+                let html = '';
+                property.units.forEach(unit => {
+                    const statusClass = unit.isOccupied ? 'occupied' : 'vacant';
+                    const statusText = unit.isOccupied ? 'Occupied' : 'Vacant';
+                    html += `
+                        <div class="unit-card">
+                            <div class="unit-number">${unit.unitNumber}</div>
+                            <p style="margin: 5px 0; color: #666; font-size: 13px;">${unit.type || 'Unit'}</p>
+                            <span class="unit-status ${statusClass}">${statusText}</span>
+                        </div>
+                    `;
+                });
+                unitsList.innerHTML = html;
+            } else {
+                unitsList.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">No units found</p>';
+            }
+        };
+
+        // Helper: Show error
+        window.showError = function(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.textContent = message;
+                errorDiv.classList.add('show');
+            }
+        };
+    </script>
+</body>
+</html>

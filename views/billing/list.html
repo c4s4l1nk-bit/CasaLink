@@ -1,0 +1,447 @@
+<!-- views/billing/list.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink - Billing</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .billing-container {
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .page-header h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .btn-primary {
+            padding: 10px 20px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-primary:hover {
+            background: #1565c0;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .summary-card-label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .summary-card-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a73e8;
+        }
+
+        .summary-card.warning .summary-card-value {
+            color: #f59e0b;
+        }
+
+        .summary-card.danger .summary-card-value {
+            color: #ef4444;
+        }
+
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-box input,
+        .filter-select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .search-box input {
+            width: 100%;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f5f5f5;
+            border-bottom: 2px solid #ddd;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+
+        tr:hover {
+            background: #f9f9f9;
+        }
+
+        .bill-info {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .bill-desc {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .amount {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge.paid {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge.overdue {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-action {
+            padding: 6px 12px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .btn-action:hover {
+            background: #1565c0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .error-message {
+            display: none;
+            color: #ef4444;
+            background: #fee2e2;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+    </style>
+</head>
+<body class="billing-page">
+    <div class="billing-container">
+        <div class="page-header">
+            <h1>Billing & Payments</h1>
+            <button class="btn-primary" id="createBillBtn">+ Create Bill</button>
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+
+        <div class="summary-cards">
+            <div class="summary-card">
+                <div class="summary-card-label">Total Due</div>
+                <div class="summary-card-value" id="totalDue">$0.00</div>
+            </div>
+            <div class="summary-card warning">
+                <div class="summary-card-label">Pending</div>
+                <div class="summary-card-value" id="pendingAmount">$0.00</div>
+            </div>
+            <div class="summary-card danger">
+                <div class="summary-card-label">Overdue</div>
+                <div class="summary-card-value" id="overdueAmount">$0.00</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-label">Collected</div>
+                <div class="summary-card-value" id="collectedAmount">$0.00</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="search-box">
+                <input 
+                    id="billSearch" 
+                    type="text" 
+                    placeholder="Search by tenant or property..." 
+                    autocomplete="off"
+                >
+            </div>
+            <select id="statusFilter" class="filter-select">
+                <option value="">All Status</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+                <option value="overdue">Overdue</option>
+            </select>
+        </div>
+
+        <div class="loading" id="loadingIndicator">Loading bills...</div>
+
+        <div class="table-wrapper">
+            <table id="billsTable">
+                <thead>
+                    <tr>
+                        <th>Bill ID</th>
+                        <th>Tenant</th>
+                        <th>Property</th>
+                        <th>Amount</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="billsList">
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <p>No bills found</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // BILLING LIST VIEW - Event Listeners Only
+        // ============================================
+        // NO LOGIC HERE - Controller handles everything
+
+        // Load bills on page load
+        if (window.billingController) {
+            window.billingController.init();
+        }
+
+        // Create bill button
+        document.getElementById('createBillBtn')?.addEventListener('click', () => {
+            if (window.billingController) {
+                window.billingController.openCreateBillModal();
+            }
+        });
+
+        // Search bills
+        let searchTimeout;
+        document.getElementById('billSearch')?.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                if (window.billingController) {
+                    window.billingController.searchBills(e.target.value);
+                }
+            }, 300);
+        });
+
+        // Filter by status
+        document.getElementById('statusFilter')?.addEventListener('change', (e) => {
+            if (window.billingController) {
+                window.billingController.filterByStatus(e.target.value);
+            }
+        });
+
+        // Helper: Display bills table
+        window.displayBills = function(bills) {
+            const tbody = document.getElementById('billsList');
+            if (!tbody) return;
+
+            if (!bills || bills.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <p>No bills found</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let html = '';
+            bills.forEach(bill => {
+                const statusClass = bill.status === 'paid' ? 'paid' : 
+                                    bill.status === 'overdue' ? 'overdue' : 'pending';
+                const statusText = bill.status.charAt(0).toUpperCase() + bill.status.slice(1);
+
+                html += `
+                    <tr data-bill-id="${bill.id}">
+                        <td class="bill-info">${bill.billNumber}</td>
+                        <td>
+                            <div class="bill-info">${bill.tenantName}</div>
+                            <div class="bill-desc">${bill.tenantEmail}</div>
+                        </td>
+                        <td>${bill.propertyName}</td>
+                        <td class="amount">$${bill.amount.toFixed(2)}</td>
+                        <td>${bill.dueDate}</td>
+                        <td>
+                            <span class="badge ${statusClass}">${statusText}</span>
+                        </td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn-action view-btn">View</button>
+                                ${bill.status !== 'paid' ? '<button class="btn-action pay-btn">Mark Paid</button>' : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+
+            // Add event listeners
+            tbody.querySelectorAll('tr').forEach(row => {
+                const billId = row.getAttribute('data-bill-id');
+
+                row.querySelector('.view-btn')?.addEventListener('click', () => {
+                    if (window.billingController) {
+                        window.billingController.viewBill(billId);
+                    }
+                });
+
+                row.querySelector('.pay-btn')?.addEventListener('click', () => {
+                    if (window.billingController) {
+                        window.billingController.markBillPaid(billId);
+                    }
+                });
+            });
+        };
+
+        // Helper: Update summary stats
+        window.updateBillingStats = function(stats) {
+            if (stats.totalDue !== undefined) {
+                const el = document.getElementById('totalDue');
+                if (el) el.textContent = `$${stats.totalDue.toFixed(2)}`;
+            }
+            if (stats.pendingAmount !== undefined) {
+                const el = document.getElementById('pendingAmount');
+                if (el) el.textContent = `$${stats.pendingAmount.toFixed(2)}`;
+            }
+            if (stats.overdueAmount !== undefined) {
+                const el = document.getElementById('overdueAmount');
+                if (el) el.textContent = `$${stats.overdueAmount.toFixed(2)}`;
+            }
+            if (stats.collectedAmount !== undefined) {
+                const el = document.getElementById('collectedAmount');
+                if (el) el.textContent = `$${stats.collectedAmount.toFixed(2)}`;
+            }
+        };
+
+        // Helper: Show/hide loading
+        window.setBillingLoading = function(isLoading) {
+            const loading = document.getElementById('loadingIndicator');
+            const table = document.getElementById('billsTable');
+            
+            if (loading) {
+                isLoading ? loading.classList.add('show') : loading.classList.remove('show');
+            }
+            if (table) {
+                table.style.display = isLoading ? 'none' : 'table';
+            }
+        };
+
+        // Helper: Show error
+        window.showBillingError = function(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.textContent = message;
+                errorDiv.classList.add('show');
+            }
+        };
+
+        // Helper: Hide error
+        window.hideBillingError = function() {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.classList.remove('show');
+            }
+        };
+    </script>
+</body>
+</html>

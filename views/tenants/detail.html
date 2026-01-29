@@ -1,0 +1,301 @@
+<!-- views/tenants/detail.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink - Tenant Profile</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        .tenant-detail-container {
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .tenant-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 32px;
+            margin-right: 20px;
+        }
+
+        .header-content h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .header-content p {
+            margin: 5px 0 0 0;
+            color: #666;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background: #1a73e8;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1565c0;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .detail-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .detail-section h2 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 16px;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 10px;
+        }
+
+        .detail-row {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .detail-label {
+            color: #666;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-badge.active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.inactive {
+            background: #f5f5f5;
+            color: #666;
+        }
+
+        .back-btn {
+            padding: 8px 16px;
+            background: #666;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+
+        .back-btn:hover {
+            background: #555;
+        }
+
+        @media (max-width: 768px) {
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="tenant-detail-page">
+    <div class="tenant-detail-container">
+        <button class="back-btn" id="backBtn">← Back to Tenants</button>
+
+        <div class="detail-header">
+            <div style="display: flex; align-items: center;">
+                <div class="tenant-avatar" id="tenantAvatar">👤</div>
+                <div class="header-content">
+                    <h1 id="tenantName">Tenant Name</h1>
+                    <p id="tenantEmail">email@example.com</p>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" id="editBtn">Edit</button>
+                <button class="btn btn-secondary" id="deleteBtn">Delete</button>
+            </div>
+        </div>
+
+        <div class="detail-grid">
+            <div class="detail-section">
+                <h2>Personal Information</h2>
+                <div class="detail-row">
+                    <div class="detail-label">Full Name</div>
+                    <div class="detail-value" id="fullName">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value" id="email">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Phone</div>
+                    <div class="detail-value" id="phone">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Status</div>
+                    <div class="detail-value" id="status">-</div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h2>Lease Information</h2>
+                <div class="detail-row">
+                    <div class="detail-label">Property</div>
+                    <div class="detail-value" id="propertyName">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Unit</div>
+                    <div class="detail-value" id="unitNumber">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Lease Start</div>
+                    <div class="detail-value" id="leaseStart">-</div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Lease End</div>
+                    <div class="detail-value" id="leaseEnd">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h2>Contact & Documents</h2>
+            <div class="detail-row">
+                <div class="detail-label">Address</div>
+                <div class="detail-value" id="address">-</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Emergency Contact</div>
+                <div class="detail-value" id="emergencyContact">-</div>
+            </div>
+            <div class="detail-row">
+                <div class="detail-label">Emergency Phone</div>
+                <div class="detail-value" id="emergencyPhone">-</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // TENANT DETAIL VIEW - Event Listeners Only
+        // ============================================
+
+        const tenantId = new URLSearchParams(window.location.search).get('id') ||
+                        window.location.hash.split('/')[1];
+
+        // Load tenant detail
+        if (window.tenantsController) {
+            loadTenantDetail();
+        }
+
+        async function loadTenantDetail() {
+            try {
+                if (!tenantId || !window.dataService) return;
+
+                const tenant = await window.dataService.getTenant(tenantId);
+                if (tenant) {
+                    displayTenantDetail(tenant);
+                }
+            } catch (error) {
+                console.error('Error loading tenant:', error);
+            }
+        }
+
+        // Back button
+        document.getElementById('backBtn')?.addEventListener('click', () => {
+            window.location.hash = '#tenants';
+        });
+
+        // Edit button
+        document.getElementById('editBtn')?.addEventListener('click', () => {
+            if (window.tenantsController) {
+                window.tenantsController.openEditTenantModal(tenantId);
+            }
+        });
+
+        // Delete button
+        document.getElementById('deleteBtn')?.addEventListener('click', () => {
+            if (confirm('Are you sure you want to delete this tenant?')) {
+                if (window.tenantsController) {
+                    window.tenantsController.deleteTenant(tenantId);
+                    setTimeout(() => {
+                        window.location.hash = '#tenants';
+                    }, 1000);
+                }
+            }
+        });
+
+        // Helper: Display tenant details
+        window.displayTenantDetail = function(tenant) {
+            document.getElementById('tenantName').textContent = tenant.fullName;
+            document.getElementById('tenantEmail').textContent = tenant.email;
+            document.getElementById('fullName').textContent = tenant.fullName;
+            document.getElementById('email').textContent = tenant.email;
+            document.getElementById('phone').textContent = tenant.phone || 'N/A';
+            
+            const statusBadge = `<span class="status-badge ${tenant.status}">${tenant.status.charAt(0).toUpperCase() + tenant.status.slice(1)}</span>`;
+            document.getElementById('status').innerHTML = statusBadge;
+
+            document.getElementById('propertyName').textContent = tenant.propertyName || 'N/A';
+            document.getElementById('unitNumber').textContent = tenant.unitNumber || 'N/A';
+            document.getElementById('leaseStart').textContent = tenant.leaseStartDate || 'N/A';
+            document.getElementById('leaseEnd').textContent = tenant.leaseEndDate || 'N/A';
+            document.getElementById('address').textContent = tenant.address || 'N/A';
+            document.getElementById('emergencyContact').textContent = tenant.emergencyContact || 'N/A';
+            document.getElementById('emergencyPhone').textContent = tenant.emergencyPhone || 'N/A';
+        };
+    </script>
+</body>
+</html>
