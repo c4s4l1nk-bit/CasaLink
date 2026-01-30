@@ -2807,7 +2807,7 @@ class CasaLink {
                 <div class="page-header">
                     <h1 class="page-title">Welcome to Your Dashboard</h1>
                     <div>
-                        <button class="btn btn-secondary"><i class="fas fa-download"></i> Export Report</button>
+                        <button class="btn btn-secondary" onclick="casaLink.exportDashboardReport()"><i class="fas fa-download"></i> Export Report</button>
                         <button class="btn btn-primary" id="addPropertyBtn"><i class="fas fa-plus"></i> Add Property</button>
                     </div>
                 </div>
@@ -8581,8 +8581,310 @@ class CasaLink {
         }
     }
 
+    async exportDashboardReport() {
+        try {
+            this.showNotification('Generating report...', 'info');
+            
+            // Fetch data for all apartments
+            const [tenants, leases, rooms, bills, maintenance] = await Promise.all([
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid),
+                this.getAllRooms(),
+                DataManager.getBills(this.currentUser.uid),
+                DataManager.getMaintenanceRequests(this.currentUser.uid)
+            ]);
+            
+            // Get unique apartments
+            const apartments = [...new Set(rooms.map(r => r.apartmentAddress).filter(Boolean))];
+            
+            // Generate printable report HTML
+            const reportHTML = this.generatePrintableReport(tenants, leases, rooms, bills, maintenance, apartments);
+            
+            // Show in modal
+            const modal = ModalManager.openModal(reportHTML, {
+                title: 'Occupancy Report - Print Preview',
+                showFooter: true,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+            
+            // Add print button to modal
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (modalFooter) {
+                modalFooter.innerHTML = `
+                    <button class="btn btn-primary" onclick="window.print()" style="print:none">
+                        <i class="fas fa-print"></i> Print / Export as PDF
+                    </button>
+                    <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))" style="print:none">
+                        Close
+                    </button>
+                `;
+            }
+            
+            this.showNotification('Report ready for printing!', 'success');
+        } catch (error) {
+            console.error('Error generating report:', error);
+            this.showNotification('Failed to generate report', 'error');
+        }
+    }
+
+    generatePrintableReport(tenants, leases, rooms, bills, maintenance, apartments) {
+        const currentDate = new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        let reportHTML = `
+            <div class="printable-report" style="padding: 40px; background: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1000px;">
+                <!-- Header -->
+                <div style="text-align: center; margin-bottom: 40px; border-bottom: 3px solid var(--royal-blue); padding-bottom: 20px;">
+                    <h1 style="margin: 0 0 10px 0; color: var(--royal-blue); font-size: 2.5rem;">OCCUPANCY REPORT</h1>
+                    <p style="margin: 5px 0; color: var(--dark-gray); font-size: 1.1rem;">Comprehensive Property Management Summary</p>
+                    <p style="margin: 10px 0 0 0; color: var(--dark-gray); font-size: 0.95rem;">Generated: ${currentDate}</p>
+                </div>
+        `;
+        
+        // Process each apartment
+        apartments.forEach((apartment, index) => {
+            // Filter data for this apartment
+            const apartmentRooms = rooms.filter(r => r.apartmentAddress === apartment);
+            const roomNumbers = apartmentRooms.map(r => r.roomNumber);
+            const apartmentLeases = leases.filter(l => roomNumbers.includes(l.roomNumber));
+            const apartmentBills = bills.filter(b => roomNumbers.includes(b.roomNumber));
+            const apartmentMaintenance = maintenance.filter(m => roomNumbers.includes(m.roomNumber));
+            
+            // Calculate stats
+            const occupiedUnits = apartmentLeases.filter(l => l.isActive).length;
+            const vacantUnits = apartmentRooms.length - occupiedUnits;
+            const occupancyRate = apartmentRooms.length > 0 ? Math.round((occupiedUnits / apartmentRooms.length) * 100) : 0;
+            const monthlyRevenue = apartmentLeases.reduce((sum, lease) => sum + (lease.monthlyRent || 0), 0);
+            const paidBills = apartmentBills.filter(b => b.status === 'paid').length;
+            const unpaidBills = apartmentBills.filter(b => b.status === 'pending' || b.status === 'overdue').length;
+            const openMaintenance = apartmentMaintenance.filter(m => m.status !== 'completed').length;
+            
+            // Add page break between apartments (except for first)
+            if (index > 0) {
+                reportHTML += '<div style="page-break-before: always; margin-top: 40px;"></div>';
+            }
+            
+            // Apartment section
+            reportHTML += `
+                <div style="margin-bottom: 30px;">
+                    <h2 style="color: var(--royal-blue); border-bottom: 2px solid var(--royal-blue); padding-bottom: 10px; margin-bottom: 20px;">
+                        📍 ${apartment}
+                    </h2>
+                    
+                    <!-- Key Metrics Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px;">
+                        <div style="background: #f0f7ff; padding: 15px; border-radius: 8px; border-left: 4px solid var(--royal-blue);">
+                            <div style="font-size: 0.85rem; color: var(--dark-gray); margin-bottom: 5px;">Total Units</div>
+                            <div style="font-size: 2rem; font-weight: 700; color: var(--royal-blue);">${apartmentRooms.length}</div>
+                        </div>
+                        
+                        <div style="background: #f0fff4; padding: 15px; border-radius: 8px; border-left: 4px solid var(--success);">
+                            <div style="font-size: 0.85rem; color: var(--dark-gray); margin-bottom: 5px;">Occupied</div>
+                            <div style="font-size: 2rem; font-weight: 700; color: var(--success);">${occupiedUnits}</div>
+                        </div>
+                        
+                        <div style="background: #fff5f0; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545;">
+                            <div style="font-size: 0.85rem; color: var(--dark-gray); margin-bottom: 5px;">Vacant</div>
+                            <div style="font-size: 2rem; font-weight: 700; color: #dc3545;">${vacantUnits}</div>
+                        </div>
+                        
+                        <div style="background: #fffaf0; padding: 15px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                            <div style="font-size: 0.85rem; color: var(--dark-gray); margin-bottom: 5px;">Occupancy Rate</div>
+                            <div style="font-size: 2rem; font-weight: 700; color: var(--warning);">${occupancyRate}%</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Financial Summary -->
+                    <div style="background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+                        <h3 style="color: var(--royal-blue); margin: 0 0 15px 0; font-size: 1.1rem;">💰 Financial Summary</h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                            <div>
+                                <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Monthly Revenue (Expected)</div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">₱${monthlyRevenue.toLocaleString('en-PH')}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Paid Bills</div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">${paidBills}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Unpaid Bills</div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #dc3545;">${unpaidBills}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Unit Details Table -->
+                    <div style="background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 30px; overflow-x: auto;">
+                        <h3 style="color: var(--royal-blue); margin: 0 0 15px 0; font-size: 1.1rem;">🏠 Unit Details</h3>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                            <thead>
+                                <tr style="background: #f8f9fa; border-bottom: 2px solid #e9ecef;">
+                                    <th style="padding: 12px; text-align: left; font-weight: 600;">Room</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600;">Status</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600;">Tenant</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600;">Monthly Rent</th>
+                                    <th style="padding: 12px; text-align: left; font-weight: 600;">Lease End Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+        `;
+            
+            apartmentRooms.forEach(room => {
+                const lease = apartmentLeases.find(l => l.roomNumber === room.roomNumber && l.isActive);
+                const status = lease ? '✓ Occupied' : '✗ Vacant';
+                const statusColor = lease ? 'var(--success)' : '#dc3545';
+                const tenantName = lease ? (lease.tenantName || 'Unknown') : '-';
+                const rent = lease ? `₱${(lease.monthlyRent || 0).toLocaleString('en-PH')}` : '-';
+                const leaseEnd = lease && lease.leaseEnd ? new Date(lease.leaseEnd).toLocaleDateString('en-PH') : '-';
+                
+                reportHTML += `
+                    <tr style="border-bottom: 1px solid #e9ecef;">
+                        <td style="padding: 12px; font-weight: 600;">${room.roomNumber}</td>
+                        <td style="padding: 12px; color: ${statusColor}; font-weight: 600;">${status}</td>
+                        <td style="padding: 12px;">${tenantName}</td>
+                        <td style="padding: 12px;">${rent}</td>
+                        <td style="padding: 12px;">${leaseEnd}</td>
+                    </tr>
+                `;
+            });
+            
+            reportHTML += `
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Maintenance Status -->
+                    <div style="background: white; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px;">
+                        <h3 style="color: var(--royal-blue); margin: 0 0 15px 0; font-size: 1.1rem;">🔧 Maintenance Status</h3>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                            <div>
+                                <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Open Requests</div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--warning);">${openMaintenance}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Total Requests</div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: var(--dark-gray);">${apartmentMaintenance.length}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        // Footer
+        reportHTML += `
+                <div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #e9ecef; text-align: center; color: var(--dark-gray); font-size: 0.9rem;">
+                    <p style="margin: 5px 0;">This is a confidential report generated by CasaLink Property Management System</p>
+                    <p style="margin: 5px 0;">Generated on ${currentDate}</p>
+                </div>
+            </div>
+            
+            <style>
+                @media print {
+                    * {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        box-shadow: none !important;
+                    }
+                    
+                    html, body {
+                        width: 100% !important;
+                        height: 100% !important;
+                        background: white !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    
+                    body > * {
+                        display: none !important;
+                    }
+                    
+                    .modal-overlay {
+                        display: block !important;
+                        position: static !important;
+                        background: white !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        padding: 0 !important;
+                    }
+                    
+                    .modal {
+                        display: block !important;
+                        position: static !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                    }
+                    
+                    .modal-content {
+                        display: block !important;
+                        position: static !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                        box-shadow: none !important;
+                        border: none !important;
+                    }
+                    
+                    .modal-header {
+                        display: none !important;
+                    }
+                    
+                    .modal-footer {
+                        display: none !important;
+                    }
+                    
+                    .modal-body {
+                        display: block !important;
+                        position: static !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                    }
+                    
+                    .printable-report {
+                        display: block !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        margin: 0 !important;
+                        padding: 40px !important;
+                        background: white !important;
+                    }
+                    
+                    .printable-report * {
+                        display: inherit !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    
+                    table {
+                        border-collapse: collapse !important;
+                        width: 100% !important;
+                    }
+                    
+                    tr {
+                        page-break-inside: avoid !important;
+                    }
+                }
+            </style>
+        `;
+        
+        return reportHTML;
+    }
+
     exportOccupancyReport() {
-        this.showNotification('Export feature coming soon!', 'info');
+        this.exportDashboardReport();
     }
 
     getExpiringLeasesCount(roomLeaseMap) {
