@@ -8964,22 +8964,27 @@ class CasaLink {
                 this.getAllRooms()
             ]);
 
-            // FILTER rooms by selected apartment
+            // FILTER rooms AND leases by selected apartment
             let filteredRooms = rooms;
+            let filteredLeases = leases;
             if (this.currentApartmentAddress) {
-                console.log(`🏢 Filtering rooms by apartment: ${this.currentApartmentAddress}`);
+                console.log(`🏢 Filtering by apartment: ${this.currentApartmentAddress}`);
                 filteredRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
+                
+                // Also filter leases to only those matching the filtered rooms' roomNumbers
+                const filteredRoomNumbers = filteredRooms.map(r => r.roomNumber);
+                filteredLeases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
             }
 
             console.log('📊 Occupancy data loaded:', {
                 tenants: tenants.length,
-                leases: leases.length,
+                leases: filteredLeases.length,
                 rooms: filteredRooms.length,
                 filteredBy: this.currentApartmentAddress ? `Apartment: ${this.currentApartmentAddress}` : 'All apartments'
             });
 
-            // Generate the occupancy table (using filtered rooms)
-            const occupancyTable = this.generateOccupancyTable(tenants, leases, filteredRooms);
+            // Generate the occupancy table (using filtered rooms AND leases)
+            const occupancyTable = this.generateOccupancyTable(tenants, filteredLeases, filteredRooms);
             
             // Update modal content with the table
             const modalBody = modal.querySelector('.modal-body');

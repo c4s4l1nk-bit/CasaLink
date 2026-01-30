@@ -1216,16 +1216,16 @@ class DataManager {
                     
                     // Filter units by apartment address
                     units = units.filter(u => u.apartmentAddress === apartmentAddress);
-                    const filteredUnitNumbers = units.map(u => u.roomNumber);
+                    const filteredRoomNumbers = units.map(u => u.roomNumber);  // Use room numbers for all filtering
                     
-                    // Filter leases to only those in the selected apartment
-                    leases = leases.filter(l => filteredUnitNumbers.includes(l.roomNumber));
+                    // Filter leases to only those in the selected apartment (leases use roomNumber field)
+                    leases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
                     
-                    // Filter bills to only those for units in the selected apartment
-                    bills = bills.filter(b => filteredUnitNumbers.includes(b.roomNumber));
+                    // Filter bills to only those for units in the selected apartment (bills use roomNumber field)
+                    bills = bills.filter(b => filteredRoomNumbers.includes(b.roomNumber));
                     
-                    // Filter maintenance to only those for units in the selected apartment
-                    maintenanceRequests = maintenanceRequests.filter(m => filteredUnitNumbers.includes(m.roomNumber));
+                    // Filter maintenance to only those for units in the selected apartment (maintenance uses roomNumber field)
+                    maintenanceRequests = maintenanceRequests.filter(m => filteredRoomNumbers.includes(m.roomNumber));
                     
                     // Filter tenants to only those in selected apartment's leases
                     const tenantIds = leases.map(l => l.tenantId).filter(Boolean);
