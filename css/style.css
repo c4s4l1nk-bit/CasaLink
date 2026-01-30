@@ -4014,28 +4014,102 @@ textarea:focus-visible {
 
 /* Print Styles */
 @media print {
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    
+    html, body {
+        width: 100% !important;
+        height: auto !important;
+        background: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+    
     body * {
-        visibility: hidden;
+        visibility: visible !important;
+    }
+    
+    /* Hide all elements except the print container */
+    body > *:not(#printReportContainer) {
+        display: none !important;
+    }
+    
+    #printReportContainer {
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        display: block !important;
+        visibility: visible !important;
+        background: white !important;
+    }
+    
+    .printable-report {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 40px !important;
+        background: white !important;
+        position: relative !important;
+        overflow: visible !important;
+        page-break-after: auto !important;
+    }
+    
+    .printable-report * {
+        position: relative !important;
+        overflow: visible !important;
+        page-break-inside: avoid !important;
+    }
+    
+    .modal-overlay,
+    .modal-overlay * {
+        visibility: visible !important;
+        display: block !important;
+        position: static !important;
+    }
+    
+    .modal,
+    .modal * {
+        visibility: visible !important;
+        display: block !important;
+        position: static !important;
     }
     
     .modal-content,
     .modal-content * {
-        visibility: visible;
-    }
-    
-    .modal-content {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        box-shadow: none !important;
-        border: none !important;
+        visibility: visible !important;
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
     }
     
     .modal-header,
     .modal-footer,
     .modal-close {
         display: none !important;
+    }
+    
+    .modal-body {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        max-height: none !important;
+        overflow: visible !important;
     }
     
     .lease-agreement-view-modal,
@@ -4047,7 +4121,57 @@ textarea:focus-visible {
     .btn, .quick-actions-bar {
         display: none !important;
     }
+    
+    /* Print-specific table styles */
+    table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+        background: white !important;
+        page-break-inside: avoid !important;
+    }
+    
+    thead {
+        display: table-header-group !important;
+    }
+    
+    tbody {
+        display: table-row-group !important;
+    }
+    
+    tr {
+        page-break-inside: avoid !important;
+        display: table-row !important;
+    }
+    
+    td, th {
+        display: table-cell !important;
+        page-break-inside: avoid !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    
+    /* Ensure backgrounds print */
+    h1, h2, h3, h4, h5, h6 {
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
+    }
+    
+    div[style*="page-break-inside: avoid"] {
+        page-break-inside: avoid !important;
+    }
+    
+    /* Color preservation */
+    div[style*="background"] {
+        background: inherit !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+    
+    /* Gradient preservation */
+    div[style*="linear-gradient"] {
+        background: inherit !important;
+        -webkit-print-color-adjust: exact !important;
+    }
 }
+
 
 /* ===== CLICKABLE UNIT CARDS STYLES ===== */
 .clickable-unit-card {

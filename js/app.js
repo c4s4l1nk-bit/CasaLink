@@ -8583,7 +8583,7 @@ class CasaLink {
 
     async exportDashboardReport() {
         try {
-            this.showNotification('Generating report...', 'info');
+            this.showNotification('Generating comprehensive report...', 'info');
             
             // Fetch data for all apartments
             const [tenants, leases, rooms, bills, maintenance] = await Promise.all([
@@ -8597,12 +8597,18 @@ class CasaLink {
             // Get unique apartments
             const apartments = [...new Set(rooms.map(r => r.apartmentAddress).filter(Boolean))];
             
-            // Generate printable report HTML
-            const reportHTML = this.generatePrintableReport(tenants, leases, rooms, bills, maintenance, apartments);
+            // Generate printable report HTML with enhanced content
+            const reportHTML = this.generateEnhancedPrintableReport(tenants, leases, rooms, bills, maintenance, apartments);
+            
+            // Create a dedicated print container
+            const printContainer = document.createElement('div');
+            printContainer.id = 'printReportContainer';
+            printContainer.innerHTML = reportHTML;
+            document.body.appendChild(printContainer);
             
             // Show in modal
             const modal = ModalManager.openModal(reportHTML, {
-                title: 'Occupancy Report - Print Preview',
+                title: 'Comprehensive Report - Print Preview',
                 showFooter: true,
                 width: '95%',
                 maxWidth: '1200px'
@@ -8612,20 +8618,466 @@ class CasaLink {
             const modalFooter = modal.querySelector('.modal-footer');
             if (modalFooter) {
                 modalFooter.innerHTML = `
-                    <button class="btn btn-primary" onclick="window.print()" style="print:none">
+                    <button class="btn btn-primary" id="printReportBtn" style="print:none">
                         <i class="fas fa-print"></i> Print / Export as PDF
                     </button>
-                    <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))" style="print:none">
+                    <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overflow'))" style="print:none">
                         Close
                     </button>
                 `;
+                
+                // Attach print handler
+                document.getElementById('printReportBtn').addEventListener('click', () => {
+                    this.handleReportPrint();
+                });
             }
             
-            this.showNotification('Report ready for printing!', 'success');
+            this.showNotification('Comprehensive report ready for printing!', 'success');
         } catch (error) {
             console.error('Error generating report:', error);
             this.showNotification('Failed to generate report', 'error');
         }
+    }
+
+    handleReportPrint() {
+        // Store current scroll position
+        const scrollPos = window.scrollY;
+        
+        // Show print container and hide modal overlay
+        const printContainer = document.getElementById('printReportContainer');
+        const modalOverlay = document.querySelector('.modal-overlay.active');
+        
+        if (printContainer) {
+            printContainer.style.display = 'block';
+        }
+        
+        // Trigger print
+        window.print();
+        
+        // Cleanup after print
+        setTimeout(() => {
+            if (printContainer) {
+                printContainer.remove();
+            }
+            window.scrollTo(0, scrollPos);
+        }, 100);
+    }
+
+    generateEnhancedPrintableReport(tenants, leases, rooms, bills, maintenance, apartments) {
+        const currentDate = new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        const currentDateTime = new Date().toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        // Calculate global statistics
+        const totalUnits = rooms.length;
+        const occupiedUnits = leases.filter(l => l.isActive).length;
+        const vacantUnits = totalUnits - occupiedUnits;
+        const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+        const totalRevenue = leases.filter(l => l.isActive).reduce((sum, lease) => sum + (lease.monthlyRent || 0), 0);
+        const totalPaidBills = bills.filter(b => b.status === 'paid').length;
+        const totalUnpaidBills = bills.filter(b => b.status === 'pending' || b.status === 'overdue').length;
+        const totalMaintenanceOpen = maintenance.filter(m => m.status !== 'completed').length;
+        const collectionRate = totalUnpaidBills + totalPaidBills > 0 ? Math.round((totalPaidBills / (totalUnpaidBills + totalPaidBills)) * 100) : 0;
+        
+        // Calculate lease expiry insights
+        const today = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(today.getDate() + 30);
+        const expiringLeases = leases.filter(l => {
+            if (l.leaseEnd && l.isActive) {
+                const leaseEnd = new Date(l.leaseEnd);
+                return leaseEnd >= today && leaseEnd <= thirtyDaysFromNow;
+            }
+            return false;
+        });
+        
+        let reportHTML = `
+            <div class="printable-report" style="padding: 40px; background: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                <!-- Header -->
+                <div style="text-align: center; margin-bottom: 40px; border-bottom: 4px solid #1e3a8a; padding-bottom: 25px;">
+                    <h1 style="margin: 0 0 15px 0; color: #1e3a8a; font-size: 2.8rem; font-weight: 800;">📊 COMPREHENSIVE PROPERTY REPORT</h1>
+                    <p style="margin: 5px 0; color: #475569; font-size: 1.15rem; font-weight: 500;">Property Management & Analytics Summary</p>
+                    <p style="margin: 15px 0 0 0; color: #64748b; font-size: 0.95rem;">Generated: ${currentDateTime}</p>
+                </div>
+
+                <!-- EXECUTIVE SUMMARY SECTION -->
+                <div style="margin-bottom: 35px; page-break-inside: avoid;">
+                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 20px 0; font-size: 1.4rem;">🎯 EXECUTIVE SUMMARY</h2>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+                        <div style="background: linear-gradient(135deg, #f0f7ff 0%, #e0f2fe 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #1e3a8a; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Total Properties</div>
+                            <div style="font-size: 2.2rem; font-weight: 800; color: #1e3a8a;">${apartments.length}</div>
+                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Apartment Locations</div>
+                        </div>
+                        
+                        <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #16a34a; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Occupancy Rate</div>
+                            <div style="font-size: 2.2rem; font-weight: 800; color: #16a34a;">${occupancyRate}%</div>
+                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">${occupiedUnits}/${totalUnits} units</div>
+                        </div>
+                        
+                        <div style="background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #e11d48; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Collection Rate</div>
+                            <div style="font-size: 2.2rem; font-weight: 800; color: #16a34a;">${collectionRate}%</div>
+                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">${totalPaidBills} of ${totalPaidBills + totalUnpaidBills}</div>
+                        </div>
+                        
+                        <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #ca8a04; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Monthly Revenue</div>
+                            <div style="font-size: 2.2rem; font-weight: 800; color: #b45309;">₱${totalRevenue.toLocaleString('en-PH')}</div>
+                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Expected Income</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FINANCIAL ANALYTICS SECTION -->
+                <div style="margin-bottom: 35px; page-break-inside: avoid;">
+                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 20px 0; font-size: 1.4rem;">💰 FINANCIAL ANALYTICS</h2>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h4 style="color: #1e3a8a; margin: 0 0 15px 0; font-size: 1rem;">Revenue Status</h4>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <span style="color: #64748b; font-size: 0.9rem;">Expected Revenue</span>
+                                <span style="font-weight: 700; color: #16a34a; font-size: 1.1rem;">₱${totalRevenue.toLocaleString('en-PH')}</span>
+                            </div>
+                            <div style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                                <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);"></div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h4 style="color: #1e3a8a; margin: 0 0 15px 0; font-size: 1rem;">Payment Status</h4>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <span style="color: #16a34a; font-size: 0.9rem;">✓ Paid (${totalPaidBills})</span>
+                                <span style="font-weight: 700; font-size: 1rem;">${totalPaidBills}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #dc2626; font-size: 0.9rem;">✗ Unpaid (${totalUnpaidBills})</span>
+                                <span style="font-weight: 700; font-size: 1rem; color: #dc2626;">${totalUnpaidBills}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h4 style="color: #1e3a8a; margin: 0 0 15px 0; font-size: 1rem;">Average Monthly</h4>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #64748b; font-size: 0.9rem;">Per Unit</span>
+                                <span style="font-weight: 700; color: #b45309; font-size: 1.2rem;">₱${occupiedUnits > 0 ? Math.round(totalRevenue / occupiedUnits).toLocaleString('en-PH') : '0'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OCCUPANCY & UNIT STATUS SECTION -->
+                <div style="margin-bottom: 35px; page-break-inside: avoid;">
+                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 20px 0; font-size: 1.4rem;">🏠 OCCUPANCY & UNIT STATUS</h2>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h4 style="color: #1e3a8a; margin: 0 0 15px 0; font-size: 1rem;">Unit Distribution</h4>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div style="text-align: center; padding: 15px; background: #f0fdf4; border-radius: 8px;">
+                                    <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 8px;">Occupied Units</div>
+                                    <div style="font-size: 2rem; font-weight: 800; color: #16a34a;">${occupiedUnits}</div>
+                                </div>
+                                <div style="text-align: center; padding: 15px; background: #fef2f2; border-radius: 8px;">
+                                    <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 8px;">Vacant Units</div>
+                                    <div style="font-size: 2rem; font-weight: 800; color: #dc2626;">${vacantUnits}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h4 style="color: #1e3a8a; margin: 0 0 15px 0; font-size: 1rem;">Key Metrics</h4>
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
+                                    <span style="color: #64748b;">Total Properties:</span>
+                                    <span style="font-weight: 700;">${apartments.length}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
+                                    <span style="color: #64748b;">Total Units:</span>
+                                    <span style="font-weight: 700;">${totalUnits}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
+                                    <span style="color: #64748b;">Tenants:</span>
+                                    <span style="font-weight: 700;">${tenants.length}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: 10px 0;">
+                                    <span style="color: #64748b;">Active Leases:</span>
+                                    <span style="font-weight: 700;">${leases.filter(l => l.isActive).length}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LEASE MANAGEMENT SECTION -->
+                <div style="margin-bottom: 35px; page-break-inside: avoid;">
+                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 20px 0; font-size: 1.4rem;">📋 LEASE MANAGEMENT</h2>
+                    
+                    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        ${expiringLeases.length > 0 ? `
+                            <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                                <div style="color: #dc2626; font-weight: 700; margin-bottom: 8px;">⚠️ ATTENTION: Expiring Leases</div>
+                                <p style="color: #64748b; font-size: 0.9rem; margin: 0;">${expiringLeases.length} lease(s) expiring within the next 30 days</p>
+                            </div>
+                            ${expiringLeases.map(lease => {
+                                const leaseEndDate = lease.leaseEnd ? new Date(lease.leaseEnd).toLocaleDateString('en-PH') : 'N/A';
+                                return `
+                                    <div style="padding: 12px 0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between;">
+                                        <div>
+                                            <div style="font-weight: 600; color: #1e3a8a;">Room ${lease.roomNumber}</div>
+                                            <div style="font-size: 0.85rem; color: #64748b;">${lease.tenantName || 'Unknown Tenant'}</div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-weight: 700; color: #dc2626;">${leaseEndDate}</div>
+                                            <div style="font-size: 0.85rem; color: #64748b;">Lease Ends</div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        ` : `
+                            <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 15px; border-radius: 6px;">
+                                <div style="color: #16a34a; font-weight: 700; margin-bottom: 8px;">✓ Good Status</div>
+                                <p style="color: #64748b; font-size: 0.9rem; margin: 0;">No leases expiring in the next 30 days</p>
+                            </div>
+                        `}
+                    </div>
+                </div>
+
+                <!-- MAINTENANCE OVERVIEW SECTION -->
+                <div style="margin-bottom: 35px; page-break-inside: avoid;">
+                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 20px 0; font-size: 1.4rem;">🔧 MAINTENANCE OVERVIEW</h2>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h4 style="color: #1e3a8a; margin: 0 0 15px 0; font-size: 1rem;">Request Status</h4>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: #ca8a04; font-size: 0.9rem;">🔴 Open Requests</span>
+                                    <span style="font-weight: 700; color: #ca8a04; font-size: 1.3rem;">${totalMaintenanceOpen}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: #16a34a; font-size: 0.9rem;">✓ Completed</span>
+                                    <span style="font-weight: 700; color: #16a34a; font-size: 1.3rem;">${maintenance.filter(m => m.status === 'completed').length}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: #64748b; font-size: 0.9rem;">Total Requests</span>
+                                    <span style="font-weight: 700; font-size: 1.3rem;">${maintenance.length}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                            <h4 style="color: #1e3a8a; margin: 0 0 15px 0; font-size: 1rem;">Completion Rate</h4>
+                            <div style="margin-bottom: 15px;">
+                                <div style="font-size: 2rem; font-weight: 800; color: #16a34a; margin-bottom: 10px;">
+                                    ${maintenance.length > 0 ? Math.round((maintenance.filter(m => m.status === 'completed').length / maintenance.length) * 100) : 0}%
+                                </div>
+                                <div style="width: 100%; height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden;">
+                                    <div style="width: ${maintenance.length > 0 ? Math.round((maintenance.filter(m => m.status === 'completed').length / maintenance.length) * 100) : 0}%; height: 100%; background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%); transition: width 0.3s ease;"></div>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.85rem; color: #64748b;">
+                                ${maintenance.filter(m => m.status === 'completed').length} of ${maintenance.length} completed
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROPERTY-BY-PROPERTY BREAKDOWN -->
+                ${apartments.map((apartment, index) => {
+                    const apartmentRooms = rooms.filter(r => r.apartmentAddress === apartment);
+                    const roomNumbers = apartmentRooms.map(r => r.roomNumber);
+                    const apartmentLeases = leases.filter(l => roomNumbers.includes(l.roomNumber) && l.isActive);
+                    const apartmentBills = bills.filter(b => roomNumbers.includes(b.roomNumber));
+                    const apartmentMaintenance = maintenance.filter(m => roomNumbers.includes(m.roomNumber));
+                    
+                    const apartmentOccupancyRate = apartmentRooms.length > 0 ? Math.round((apartmentLeases.length / apartmentRooms.length) * 100) : 0;
+                    const apartmentRevenue = apartmentLeases.reduce((sum, lease) => sum + (lease.monthlyRent || 0), 0);
+                    
+                    return `
+                        <div style="margin-bottom: 35px; page-break-inside: avoid;">
+                            <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 20px 0; font-size: 1.4rem;">📍 ${apartment}</h2>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                                <div style="background: #f0f7ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                    <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 5px;">Units</div>
+                                    <div style="font-size: 1.8rem; font-weight: 800; color: #1e3a8a;">${apartmentRooms.length}</div>
+                                </div>
+                                <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; text-align: center;">
+                                    <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 5px;">Occupied</div>
+                                    <div style="font-size: 1.8rem; font-weight: 800; color: #16a34a;">${apartmentLeases.length}</div>
+                                </div>
+                                <div style="background: #fef2f2; padding: 15px; border-radius: 8px; text-align: center;">
+                                    <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 5px;">Vacant</div>
+                                    <div style="font-size: 1.8rem; font-weight: 800; color: #dc2626;">${apartmentRooms.length - apartmentLeases.length}</div>
+                                </div>
+                                <div style="background: #fffbeb; padding: 15px; border-radius: 8px; text-align: center;">
+                                    <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 5px;">Occupancy %</div>
+                                    <div style="font-size: 1.8rem; font-weight: 800; color: #ca8a04;">${apartmentOccupancyRate}%</div>
+                                </div>
+                            </div>
+                            
+                            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background: #f8f9fa; border-bottom: 2px solid #e2e8f0;">
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3a8a;">Room</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3a8a;">Status</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3a8a;">Tenant Name</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3a8a;">Monthly Rent</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3a8a;">Lease End</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${apartmentRooms.map(room => {
+                                        const lease = apartmentLeases.find(l => l.roomNumber === room.roomNumber);
+                                        const status = lease ? '✓ Occupied' : '✗ Vacant';
+                                        const statusColor = lease ? '#16a34a' : '#dc2626';
+                                        const tenantName = lease ? (lease.tenantName || 'Unknown') : '-';
+                                        const rent = lease ? '₱' + (lease.monthlyRent || 0).toLocaleString('en-PH') : '-';
+                                        const leaseEnd = lease && lease.leaseEnd ? new Date(lease.leaseEnd).toLocaleDateString('en-PH') : '-';
+                                        
+                                        return `
+                                            <tr style="border-bottom: 1px solid #e2e8f0;">
+                                                <td style="padding: 12px; font-weight: 600; color: #1e3a8a;">${room.roomNumber}</td>
+                                                <td style="padding: 12px; font-weight: 700; color: ${statusColor};">${status}</td>
+                                                <td style="padding: 12px; color: #475569;">${tenantName}</td>
+                                                <td style="padding: 12px; color: #16a34a; font-weight: 600;">${rent}</td>
+                                                <td style="padding: 12px; color: #64748b;">${leaseEnd}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                }).join('')}
+
+                <!-- FOOTER -->
+                <div style="margin-top: 50px; padding-top: 25px; border-top: 2px solid #e2e8f0; text-align: center; color: #64748b; font-size: 0.9rem;">
+                    <p style="margin: 5px 0; font-weight: 600;">📄 CONFIDENTIAL PROPERTY MANAGEMENT REPORT</p>
+                    <p style="margin: 5px 0;">Generated by CasaLink Property Management System</p>
+                    <p style="margin: 5px 0; font-size: 0.85rem; color: #94a3b8;">${currentDateTime}</p>
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #94a3b8;">
+                        <p style="margin: 3px 0;">This report contains proprietary information and is intended for authorized use only.</p>
+                        <p style="margin: 3px 0;">© 2026 CasaLink. All rights reserved.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <style>
+                @media print {
+                    * {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        box-shadow: none !important;
+                    }
+                    
+                    html, body {
+                        width: 100% !important;
+                        height: 100% !important;
+                        background: white !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    
+                    body > * {
+                        display: none !important;
+                    }
+                    
+                    .modal-overlay {
+                        display: block !important;
+                        position: static !important;
+                        background: white !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        padding: 0 !important;
+                    }
+                    
+                    .modal {
+                        display: block !important;
+                        position: static !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                    }
+                    
+                    .modal-content {
+                        display: block !important;
+                        position: static !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                        box-shadow: none !important;
+                        border: none !important;
+                    }
+                    
+                    .modal-header {
+                        display: none !important;
+                    }
+                    
+                    .modal-footer {
+                        display: none !important;
+                    }
+                    
+                    .modal-body {
+                        display: block !important;
+                        position: static !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                    }
+                    
+                    .printable-report {
+                        display: block !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        margin: 0 !important;
+                        padding: 40px !important;
+                        background: white !important;
+                    }
+                    
+                    .printable-report * {
+                        display: inherit !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                        color-adjust: exact !important;
+                    }
+                    
+                    table {
+                        border-collapse: collapse !important;
+                        width: 100% !important;
+                    }
+                    
+                    tr {
+                        page-break-inside: avoid !important;
+                    }
+                }
+            </style>
+        `;
+        
+        return reportHTML;
+        
+        return reportHTML;
     }
 
     generatePrintableReport(tenants, leases, rooms, bills, maintenance, apartments) {
