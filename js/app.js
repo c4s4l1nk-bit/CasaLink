@@ -9915,15 +9915,20 @@ class CasaLink {
                 this.getAllRooms()
             ]);
 
-            // FILTER rooms by selected apartment
+            // FILTER rooms AND leases by selected apartment
             let filteredRooms = rooms;
+            let filteredLeases = leases;
             if (this.currentApartmentAddress) {
                 console.log(`🏢 Filtering vacant units by apartment: ${this.currentApartmentAddress}`);
                 filteredRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
+                
+                // Also filter leases to only those matching the filtered rooms' roomNumbers
+                const filteredRoomNumbers = filteredRooms.map(r => r.roomNumber);
+                filteredLeases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
             }
 
-            // Generate the vacant units table (using filtered rooms)
-            const vacantUnitsTable = this.generateVacantUnitsTable(tenants, leases, filteredRooms);
+            // Generate the vacant units table (using filtered rooms AND leases)
+            const vacantUnitsTable = this.generateVacantUnitsTable(tenants, filteredLeases, filteredRooms);
             
             // Update modal content with the table
             const modalBody = modal.querySelector('.modal-body');
@@ -10133,22 +10138,27 @@ class CasaLink {
                 this.getAllRooms()
             ]);
 
-            // FILTER rooms by selected apartment
+            // FILTER rooms AND leases by selected apartment
             let filteredRooms = rooms;
+            let filteredLeases = leases;
             if (this.currentApartmentAddress) {
                 console.log(`🏢 Filtering tenant details by apartment: ${this.currentApartmentAddress}`);
                 filteredRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
+                
+                // Also filter leases to only those matching the filtered rooms' roomNumbers
+                const filteredRoomNumbers = filteredRooms.map(r => r.roomNumber);
+                filteredLeases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
             }
 
             console.log('📊 Tenant details data loaded:', {
                 tenants: tenants.length,
-                leases: leases.length,
+                leases: filteredLeases.length,
                 rooms: filteredRooms.length,
                 filteredBy: this.currentApartmentAddress ? `Apartment: ${this.currentApartmentAddress}` : 'All apartments'
             });
 
-            // Generate the tenant details table (using filtered rooms)
-            const tenantDetailsTable = this.generateTenantDetailsTable(tenants, leases, filteredRooms);
+            // Generate the tenant details table (using filtered rooms AND leases)
+            const tenantDetailsTable = this.generateTenantDetailsTable(tenants, filteredLeases, filteredRooms);
             
             // Update modal content with the table
             const modalBody = modal.querySelector('.modal-body');
