@@ -1514,6 +1514,36 @@ class CasaLink {
                 })
             );
 
+            // 4.5 Fetch custom activities collection (landlord-scoped)
+            console.log('🔍 Fetching custom activities...');
+            let activitiesQuery = firebaseDb.collection('activities')
+                .where('landlordId', '==', userId)
+                .orderBy('timestamp', 'desc')
+                .limit(50);
+
+            fetchPromises.push(
+                activitiesQuery.get().then(snapshot => {
+                    console.log(`✅ Found ${snapshot.size} custom activities`);
+                    snapshot.forEach(doc => {
+                        const act = doc.data();
+                        const actDate = new Date(act.timestamp);
+                        if (actDate >= ninetyDaysAgo && actDate <= now) {
+                            activities.push({
+                                type: act.type || 'custom',
+                                title: act.title || 'Activity',
+                                description: act.description || '',
+                                timestamp: act.timestamp,
+                                icon: act.icon || 'fas fa-info-circle',
+                                color: act.color || 'var(--info)',
+                                data: { ...act.data, id: doc.id }
+                            });
+                        }
+                    });
+                }).catch(error => {
+                    console.error('❌ Error fetching custom activities:', error);
+                })
+            );
+
             // 4. Fetch Maintenance Requests - SIMPLIFIED
             console.log('🔍 Fetching maintenance requests...');
             let maintenanceQuery = firebaseDb.collection('maintenance')
@@ -1703,11 +1733,15 @@ class CasaLink {
     renderActivitiesList(activities) {
         console.log(`🎨 Rendering ${activities.length} activity items`);
         
-        return activities.map((activity, index) => `
+        return activities.map((activity, index) => {
+            // Determine the most relevant entity id: prioritize apartmentId/propertyId, then generic id
+            const entityId = (activity.data && (activity.data.apartmentId || activity.data.propertyId || activity.data.id)) || '';
+            const entityPayload = encodeURIComponent(JSON.stringify(activity.data || {}));
+            return `
             <div class="activity-item" 
                 data-activity-type="${activity.type}" 
-                data-activity-id="${activity.data?.id || ''}"
-                onclick="casaLink.viewActivityDetails('${activity.type}', '${activity.data?.id || ''}')">
+                data-activity-id="${entityId}"
+                onclick="casaLink.viewActivityDetails('${activity.type}', '${entityId}', '${entityPayload}')">
                 <div class="activity-icon" style="background: ${activity.color}20; color: ${activity.color};">
                     <i class="${activity.icon}"></i>
                 </div>
@@ -1717,12 +1751,13 @@ class CasaLink {
                     <div class="activity-time">${this.formatActivityTime(activity.timestamp)}</div>
                 </div>
                 <div class="activity-actions">
-                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewActivityDetails('${activity.type}', '${activity.data?.id || ''}')">
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewActivityDetails('${activity.type}', '${entityId}', '${entityPayload}')">
                         <i class="fas fa-eye"></i> View Details
                     </button>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // Empty state for activities
@@ -1855,9 +1890,19 @@ class CasaLink {
     }
 
     // Unified activity details modal - consolidates 6 similar modal methods into one
-    async showActivityDetailsModal(activityType, entityId) {
+    async showActivityDetailsModal(activityType, entityId, activityDataEncoded) {
         try {
             let data, modalTitle, modalContent;
+            // Parse provided activity data payload (if any)
+            let activityData = null;
+            try {
+                if (activityDataEncoded) {
+                    activityData = JSON.parse(decodeURIComponent(activityDataEncoded));
+                }
+            } catch (err) {
+                console.warn('⚠️ Could not parse activity data payload', err);
+                activityData = null;
+            }
 
             switch (activityType) {
                 case 'bill_generated':
@@ -2034,6 +2079,63 @@ class CasaLink {
                     `;
                     break;
 
+                case 'new_property':
+                    // Display details for newly added property/apartment
+                    modalTitle = 'New Property Created';
+                    // Try to use provided activity payload first
+                    let fetched = null;
+                    // If activityData contains an apartmentId or propertyId, try fetching that doc
+                    try {
+                        if (activityData && activityData.apartmentId) {
+                            const doc = await firebaseDb.collection('apartments').doc(activityData.apartmentId).get();
+                            if (doc.exists) fetched = { id: doc.id, ...doc.data() };
+                        }
+                        if (!fetched && activityData && activityData.propertyId) {
+                            const doc = await firebaseDb.collection('properties').doc(activityData.propertyId).get();
+                            if (doc.exists) fetched = { id: doc.id, ...doc.data() };
+                        }
+                        // If no activityData fetched, try entityId against apartments then properties
+                        if (!fetched && entityId) {
+                            let doc = await firebaseDb.collection('apartments').doc(entityId).get();
+                            if (doc.exists) fetched = { id: doc.id, ...doc.data() };
+                            else {
+                                doc = await firebaseDb.collection('properties').doc(entityId).get();
+                                if (doc.exists) fetched = { id: doc.id, ...doc.data() };
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('⚠️ Error fetching property/apartment document for activity:', err);
+                    }
+
+                    // Merge fetched data with activityData (fetched takes precedence)
+                    data = Object.assign({}, activityData || {}, fetched || {});
+
+                    modalContent = `
+                        <div class="activity-details-modal">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <i class="fas fa-building" style="font-size: 3rem; color: var(--royal-blue); margin-bottom: 15px;"></i>
+                                <h3 style="margin-bottom: 10px;">New Property Added</h3>
+                                <p>Details for newly created property</p>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                                <h4 style="color: var(--royal-blue); margin-bottom: 15px;">Property Information</h4>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div><strong>Name:</strong><br>${data.name || data.propertyName || data.apartmentAddress || 'N/A'}</div>
+                                    <div><strong>Address:</strong><br>${data.address || data.location || data.apartmentAddress || 'N/A'}</div>
+                                    <div><strong>Units:</strong><br>${data.numberOfUnits || data.numberOfRooms || data.roomsCreated || 'N/A'}</div>
+                                    <div><strong>Owner:</strong><br>${data.landlordName || data.ownerName || 'N/A'}</div>
+                                    <div><strong>Created:</strong><br>${data.createdAt ? new Date(data.createdAt).toLocaleDateString() : (data.timestamp ? new Date(data.timestamp).toLocaleDateString() : 'N/A')}</div>
+                                    <div><strong>Last Updated:</strong><br>${data.updatedAt ? new Date(data.updatedAt).toLocaleDateString() : 'N/A'}</div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn btn-primary" onclick="casaLink.showPage('properties')"><i class="fas fa-building"></i> View Properties</button>
+                                <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">Close</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
                 default:
                     throw new Error('Unknown activity type: ' + activityType);
             }
@@ -2064,11 +2166,11 @@ class CasaLink {
         }
     }
 
-    async viewActivityDetails(activityType, activityId) {
+    async viewActivityDetails(activityType, activityId, activityDataEncoded) {
         console.log('🔍 Viewing activity details:', { activityType, activityId });
         
         try {
-            await this.showActivityDetailsModal(activityType, activityId);
+            await this.showActivityDetailsModal(activityType, activityId, activityDataEncoded);
         } catch (error) {
             console.error('❌ Error viewing activity details:', error);
             this.showNotification('Failed to load activity details', 'error');
@@ -2172,7 +2274,7 @@ class CasaLink {
             }
             
             // Fetch landlord's apartments
-            const apartments = await DataManager.getLandlordApartments(this.currentUser.uid);
+            const apartments = await DataManager.getLandlordApartments(this.currentUser.id || this.currentUser.uid);
             
             console.log('📍 Found apartments:', apartments.length);
             
@@ -2249,7 +2351,7 @@ class CasaLink {
             } else {
                 // Fallback: derive apartments from rooms if no apartments collection exists yet
                 console.log('ℹ️ No apartments found for landlord, deriving from rooms...');
-                const units = await DataManager.getLandlordUnits(this.currentUser.uid);
+                const units = await DataManager.getLandlordUnits(this.currentUser.id || this.currentUser.uid);
                 const addresses = Array.from(new Set(units.map(u => u.apartmentAddress).filter(Boolean)));
 
                 if (addresses.length === 0) {
@@ -2307,7 +2409,7 @@ class CasaLink {
                     this.shouldAutoLoadUnitLayout = true; // User manually selected, load it
                     console.log('🔄 Switched to apartment (derived):', this.currentApartmentAddress);
                     this.loadAndDisplayUnitLayoutInDashboard();
-                    this.loadDashboardDataForSelectedApartment();
+                        this.loadDashboardDataForSelectedApartment();
                 });
                 
                 return { count: addresses.length };
@@ -2599,6 +2701,26 @@ class CasaLink {
                     this.currentApartmentId = result.apartmentId;
                     this.currentApartmentAddress = data.address;
                     this.loadAndDisplayUnitLayoutInDashboard();
+                    // Refresh dashboard overview cards and related stats for the newly created apartment
+                    if (typeof this.loadDashboardDataForSelectedApartment === 'function') {
+                        this.loadDashboardDataForSelectedApartment();
+                    }
+                    // Log activity: new apartment created
+                    try {
+                        DataManager.logActivity(this.currentUser.id || this.currentUser.uid, {
+                            type: 'new_property',
+                            title: 'New Property Created',
+                            description: `${data.address} — ${result.roomsCreated} units added`,
+                            icon: 'fas fa-building',
+                            color: 'var(--info)',
+                            data: { apartmentId: result.apartmentId, address: data.address, roomsCreated: result.roomsCreated }
+                        }).then(() => {
+                            // Refresh recent activities UI
+                            try { this.loadRecentActivities(); } catch (e) { console.warn('Unable to refresh activities:', e); }
+                        }).catch(err => console.warn('Activity log failed:', err));
+                    } catch (err) {
+                        console.warn('Activity logging error:', err);
+                    }
                 }
 
                 window.apartmentFormData = null;
@@ -2754,7 +2876,7 @@ class CasaLink {
         }
         
         // Trigger a manual refresh by fetching data again
-        DataManager.getLandlordUnits(this.currentUser.uid)
+        DataManager.getLandlordUnits(this.currentUser.id || this.currentUser.uid)
             .then(units => {
                 console.log('📊 Refreshed units:', units.length);
                 this.updateUnitLayout(units, modal.closest('.modal-overlay'));
@@ -3085,10 +3207,11 @@ class CasaLink {
             
             // Fetch units, tenants, and leases from Firestore
             console.log('📡 Fetching units, tenants, and leases for inline display...');
+            const currentLandlordId = this.currentUser?.id || this.currentUser?.uid;
             const [units, tenants, leases] = await Promise.all([
                 this.fetchAllUnitsFromFirestore(),
-                DataManager.getTenants(this.currentUser.uid),
-                DataManager.getLandlordLeases(this.currentUser.uid)
+                DataManager.getTenants(currentLandlordId),
+                DataManager.getLandlordLeases(currentLandlordId)
             ]);
             
             // Enrich units with tenant names
@@ -3163,7 +3286,8 @@ class CasaLink {
     enrichUnitsWithTenantData(units, tenants, leases) {
         console.log('🔄 Enriching units with tenant data...');
         
-        // Create a map for quick lookup: roomNumber -> lease info
+        // Create a map for quick lookup: apartmentAddress+roomNumber -> lease info
+        // This prevents cross-apartment collisions when rooms have same roomNumber in different apartments
         const roomLeaseMap = new Map();
         
         // Process leases to find occupied rooms
@@ -3171,7 +3295,12 @@ class CasaLink {
             if (lease.isActive && lease.roomNumber) {
                 // Find tenant info for this lease
                 const tenant = tenants.find(t => t.id === lease.tenantId);
-                roomLeaseMap.set(lease.roomNumber, {
+                
+                // Create apartment-scoped key to prevent collisions
+                // Use apartmentAddress if available, otherwise use roomNumber alone (legacy leases)
+                const mapKey = lease.apartmentAddress ? `${lease.apartmentAddress}|${lease.roomNumber}` : lease.roomNumber;
+                
+                roomLeaseMap.set(mapKey, {
                     tenantId: lease.tenantId,
                     tenantName: tenant?.name || lease.tenantName || 'Unknown Tenant',
                     tenantEmail: tenant?.email || lease.tenantEmail || 'No email',
@@ -3184,7 +3313,18 @@ class CasaLink {
         
         // Enrich units with tenant information
         const enrichedUnits = units.map(unit => {
-            const leaseInfo = roomLeaseMap.get(unit.roomNumber);
+            // Try to find lease info using apartment-scoped key first
+            let leaseInfo = null;
+            
+            if (unit.apartmentAddress) {
+                // Apartment-scoped lookup for new units with apartmentAddress
+                leaseInfo = roomLeaseMap.get(`${unit.apartmentAddress}|${unit.roomNumber}`);
+            }
+            
+            // Fallback to roomNumber-only lookup for units without apartmentAddress (legacy)
+            if (!leaseInfo) {
+                leaseInfo = roomLeaseMap.get(unit.roomNumber);
+            }
             
             return {
                 ...unit,
@@ -3229,15 +3369,15 @@ class CasaLink {
                             </div>
                             <div style="text-align: center; min-width: 100px;">
                                 <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);">${occupiedUnits}</div>
-                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupied</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupied Units</div>
                             </div>
                             <div style="text-align: center; min-width: 100px;">
                                 <div style="font-size: 1.8rem; font-weight: 700; color: #dc3545;">${vacantUnits}</div>
-                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Vacant</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Vacant Units</div>
                             </div>
                             <div style="text-align: center; min-width: 100px;">
                                 <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning);">${occupancyRate}%</div>
-                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupancy</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupancy Rate</div>
                             </div>
                         </div>
                     </div>
@@ -4963,10 +5103,35 @@ class CasaLink {
                         DataManager.getLandlordLeases(this.currentUser.uid)
                     ]);
                     
-                    // Find the active lease for this room
-                    const activeLease = leases.find(lease => 
-                        lease.isActive && lease.roomNumber === room.roomNumber
-                    );
+                    // Find the active lease for this room using apartment-scoped 3-tier matching
+                    let activeLease = null;
+            
+                    // Tier 1: Explicit roomId linkage (if room has id)
+                    if (room.id) {
+                        activeLease = leases.find(lease => 
+                            lease.isActive && lease.roomId === room.id
+                        );
+                    }
+            
+                    // Tier 2: Explicit apartmentAddress linkage
+                    if (!activeLease && room.apartmentAddress) {
+                        activeLease = leases.find(lease => 
+                            lease.isActive && 
+                            lease.apartmentAddress === room.apartmentAddress &&
+                            lease.roomNumber === room.roomNumber
+                        );
+                    }
+            
+                    // Tier 3: roomNumber matching (but prevent cross-apartment collisions)
+                    if (!activeLease) {
+                        activeLease = leases.find(lease => {
+                            if (!lease.isActive || lease.roomNumber !== room.roomNumber) return false;
+                            // If lease has explicit apartmentAddress, it must match room's apartment
+                            if (lease.apartmentAddress && room.apartmentAddress && 
+                                lease.apartmentAddress !== room.apartmentAddress) return false;
+                            return true;
+                        });
+                    }
                     
                     if (activeLease) {
                         // Find the tenant associated with this lease
@@ -9686,10 +9851,11 @@ class CasaLink {
                 modalContentElement.style.width = '95%';
             }
 
-            // Fetch all necessary data
+            // Fetch all necessary data using consistent landlord id
+            const landlordId = this.currentUser?.id || this.currentUser?.uid;
             const [tenants, leases, rooms] = await Promise.all([
-                DataManager.getTenants(this.currentUser.uid),
-                DataManager.getLandlordLeases(this.currentUser.uid),
+                DataManager.getTenants(landlordId),
+                DataManager.getLandlordLeases(landlordId),
                 this.getAllRooms()
             ]);
 
@@ -9700,9 +9866,19 @@ class CasaLink {
                 console.log(`🏢 Filtering by apartment: ${this.currentApartmentAddress}`);
                 filteredRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
                 
-                // Also filter leases to only those matching the filtered rooms' roomNumbers
+                // Filter leases using 3-tier matching (same as getDashboardStats)
                 const filteredRoomNumbers = filteredRooms.map(r => r.roomNumber);
-                filteredLeases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
+                const filteredRoomIds = filteredRooms.map(r => r.id);
+                filteredLeases = leases.filter(l => {
+                    // Tier 1: Explicit roomId linkage
+                    if (l.roomId && filteredRoomIds.includes(l.roomId)) return true;
+                    // Tier 2: Explicit apartmentAddress/propertyId linkage
+                    if (l.apartmentAddress && l.apartmentAddress === this.currentApartmentAddress) return true;
+                    if (l.propertyId && this.currentApartmentId && l.propertyId === this.currentApartmentId) return true;
+                    // Tier 3: roomNumber within this apartment context
+                    if (l.roomNumber && filteredRoomNumbers.includes(l.roomNumber)) return true;
+                    return false;
+                });
             }
 
             console.log('📊 Occupancy data loaded:', {
@@ -10637,10 +10813,11 @@ class CasaLink {
                 modalContentElement.style.width = '90%';
             }
 
-            // Fetch all necessary data
+            // Fetch all necessary data using consistent landlord id
+            const landlordId = this.currentUser?.id || this.currentUser?.uid;
             const [tenants, leases, rooms] = await Promise.all([
-                DataManager.getTenants(this.currentUser.uid),
-                DataManager.getLandlordLeases(this.currentUser.uid),
+                DataManager.getTenants(landlordId),
+                DataManager.getLandlordLeases(landlordId),
                 this.getAllRooms()
             ]);
 
@@ -10651,9 +10828,23 @@ class CasaLink {
                 console.log(`🏢 Filtering vacant units by apartment: ${this.currentApartmentAddress}`);
                 filteredRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
                 
-                // Also filter leases to only those matching the filtered rooms' roomNumbers
+                // Filter leases using 3-tier matching (same as getDashboardStats)
                 const filteredRoomNumbers = filteredRooms.map(r => r.roomNumber);
-                filteredLeases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
+                const filteredRoomIds = filteredRooms.map(r => r.id);
+                filteredLeases = leases.filter(l => {
+                    // Tier 1: Explicit roomId linkage
+                    if (l.roomId && filteredRoomIds.includes(l.roomId)) return true;
+                    // Tier 2: Explicit apartmentAddress/propertyId linkage
+                    if (l.apartmentAddress && l.apartmentAddress === this.currentApartmentAddress) return true;
+                    if (l.propertyId && this.currentApartmentId && l.propertyId === this.currentApartmentId) return true;
+                    // Tier 3: roomNumber within this apartment context (but prevent cross-apartment collisions)
+                    if (l.roomNumber && filteredRoomNumbers.includes(l.roomNumber)) {
+                        // If lease has apartmentAddress, it must match selected apartment
+                        if (l.apartmentAddress && l.apartmentAddress !== this.currentApartmentAddress) return false;
+                        return true;
+                    }
+                    return false;
+                });
             }
 
             // Generate the vacant units table (using filtered rooms AND leases)
@@ -10691,15 +10882,25 @@ class CasaLink {
         // Create a map of roomNumber to lease info with occupants
         const roomLeaseMap = new Map();
         
-        // Process leases to group by room and get occupant information
+        // Process ALL active leases (regardless of occupants array)
         leases.forEach(lease => {
-            if (lease.isActive && lease.roomNumber && lease.occupants && lease.occupants.length > 0) {
-                const primaryTenant = lease.occupants[0];
-                const otherOccupants = lease.occupants.slice(1);
-                const totalOccupants = lease.totalOccupants || lease.occupants.length;
-                
-                // Find tenant info for email
+            if (lease.isActive && lease.roomNumber) {
+                // Find tenant info for this lease
                 const tenant = tenants.find(t => t.id === lease.tenantId);
+                
+                // Get occupants list - parse from occupants array or use tenant name
+                let occupantsList = [];
+                if (lease.occupants && Array.isArray(lease.occupants) && lease.occupants.length > 0) {
+                    occupantsList = lease.occupants;
+                } else {
+                    // If no occupants array, use the tenant/lease name as primary
+                    occupantsList = [tenant?.name || lease.tenantName || 'Unknown'];
+                }
+                
+                // Get total occupants - from field or derive from occupants list
+                const totalOccupants = lease.totalOccupants || occupantsList.length;
+                const primaryTenant = occupantsList[0] || (tenant?.name || lease.tenantName || 'Unknown Tenant');
+                const otherOccupants = occupantsList.slice(1);
                 
                 roomLeaseMap.set(lease.roomNumber, {
                     roomNumber: lease.roomNumber,
@@ -10860,10 +11061,11 @@ class CasaLink {
                 modalContentElement.style.width = '95%';
             }
 
-            // Fetch all necessary data
+            // Fetch all necessary data using consistent landlord id
+            const landlordId = this.currentUser?.id || this.currentUser?.uid;
             const [tenants, leases, rooms] = await Promise.all([
-                DataManager.getTenants(this.currentUser.uid),
-                DataManager.getLandlordLeases(this.currentUser.uid),
+                DataManager.getTenants(landlordId),
+                DataManager.getLandlordLeases(landlordId),
                 this.getAllRooms()
             ]);
 
@@ -10874,9 +11076,23 @@ class CasaLink {
                 console.log(`🏢 Filtering tenant details by apartment: ${this.currentApartmentAddress}`);
                 filteredRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
                 
-                // Also filter leases to only those matching the filtered rooms' roomNumbers
+                // Filter leases using 3-tier matching (same as getDashboardStats)
                 const filteredRoomNumbers = filteredRooms.map(r => r.roomNumber);
-                filteredLeases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
+                const filteredRoomIds = filteredRooms.map(r => r.id);
+                filteredLeases = leases.filter(l => {
+                    // Tier 1: Explicit roomId linkage
+                    if (l.roomId && filteredRoomIds.includes(l.roomId)) return true;
+                    // Tier 2: Explicit apartmentAddress/propertyId linkage
+                    if (l.apartmentAddress && l.apartmentAddress === this.currentApartmentAddress) return true;
+                    if (l.propertyId && this.currentApartmentId && l.propertyId === this.currentApartmentId) return true;
+                    // Tier 3: roomNumber within this apartment context (but prevent cross-apartment collisions)
+                    if (l.roomNumber && filteredRoomNumbers.includes(l.roomNumber)) {
+                        // If lease has apartmentAddress, it must match selected apartment
+                        if (l.apartmentAddress && l.apartmentAddress !== this.currentApartmentAddress) return false;
+                        return true;
+                    }
+                    return false;
+                });
             }
 
             console.log('📊 Tenant details data loaded:', {
@@ -11458,21 +11674,40 @@ class CasaLink {
                 maxWidth: '1200px'
             });
 
+            // Use consistent landlord id
+            const landlordId = this.currentUser?.id || this.currentUser?.uid;
             const [bills, leases, rooms] = await Promise.all([
-                DataManager.getBills(this.currentUser.uid),
-                DataManager.getLandlordLeases(this.currentUser.uid),
+                DataManager.getBills(landlordId),
+                DataManager.getLandlordLeases(landlordId),
                 this.getAllRooms()
             ]);
 
-            // FILTER by selected apartment
+            // FILTER by selected apartment using 3-tier matching
             let filteredBills = bills;
             let filteredLeases = leases;
             if (this.currentApartmentAddress) {
                 console.log(`🏢 Filtering revenue by apartment: ${this.currentApartmentAddress}`);
                 const apartmentRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
                 const roomNumbers = apartmentRooms.map(r => r.roomNumber);
-                filteredBills = bills.filter(b => roomNumbers.includes(b.roomNumber));
-                filteredLeases = leases.filter(l => roomNumbers.includes(l.roomNumber));
+                const roomIds = apartmentRooms.map(r => r.id);
+                
+                filteredBills = bills.filter(b => {
+                    if (b.roomId && roomIds.includes(b.roomId)) return true;
+                    if (b.apartmentAddress && b.apartmentAddress === this.currentApartmentAddress) return true;
+                    if (b.roomNumber && roomNumbers.includes(b.roomNumber)) return true;
+                    return false;
+                });
+                
+                filteredLeases = leases.filter(l => {
+                    if (l.roomId && roomIds.includes(l.roomId)) return true;
+                    if (l.apartmentAddress && l.apartmentAddress === this.currentApartmentAddress) return true;
+                    if (l.roomNumber && roomNumbers.includes(l.roomNumber)) {
+                        // If lease has apartmentAddress, it must match selected apartment
+                        if (l.apartmentAddress && l.apartmentAddress !== this.currentApartmentAddress) return false;
+                        return true;
+                    }
+                    return false;
+                });
             }
 
             const revenueData = this.calculateRevenueBreakdown(filteredBills, filteredLeases);
@@ -11512,23 +11747,41 @@ class CasaLink {
                 maxWidth: '1200px'
             });
 
-            // Fetch data
+            // Use consistent landlord id
+            const landlordId = this.currentUser?.id || this.currentUser?.uid;
             const [tenants, leases, bills, rooms] = await Promise.all([
-                DataManager.getTenants(this.currentUser.uid),
-                DataManager.getLandlordLeases(this.currentUser.uid),
-                DataManager.getBills(this.currentUser.uid),
+                DataManager.getTenants(landlordId),
+                DataManager.getLandlordLeases(landlordId),
+                DataManager.getBills(landlordId),
                 this.getAllRooms()
             ]);
 
-            // FILTER by selected apartment
+            // FILTER by selected apartment using 3-tier matching
             let filteredLeases = leases;
             let filteredBills = bills;
             if (this.currentApartmentAddress) {
                 console.log(`🏢 Filtering rent collection by apartment: ${this.currentApartmentAddress}`);
                 const apartmentRooms = rooms.filter(r => r.apartmentAddress === this.currentApartmentAddress);
                 const roomNumbers = apartmentRooms.map(r => r.roomNumber);
-                filteredLeases = leases.filter(l => roomNumbers.includes(l.roomNumber));
-                filteredBills = bills.filter(b => roomNumbers.includes(b.roomNumber));
+                const roomIds = apartmentRooms.map(r => r.id);
+                
+                filteredLeases = leases.filter(l => {
+                    if (l.roomId && roomIds.includes(l.roomId)) return true;
+                    if (l.apartmentAddress && l.apartmentAddress === this.currentApartmentAddress) return true;
+                    if (l.roomNumber && roomNumbers.includes(l.roomNumber)) {
+                        // If lease has apartmentAddress, it must match selected apartment
+                        if (l.apartmentAddress && l.apartmentAddress !== this.currentApartmentAddress) return false;
+                        return true;
+                    }
+                    return false;
+                });
+                
+                filteredBills = bills.filter(b => {
+                    if (b.roomId && roomIds.includes(b.roomId)) return true;
+                    if (b.apartmentAddress && b.apartmentAddress === this.currentApartmentAddress) return true;
+                    if (b.roomNumber && roomNumbers.includes(b.roomNumber)) return true;
+                    return false;
+                });
             }
 
             // Calculate collection statistics (using filtered data)
@@ -12426,7 +12679,7 @@ class CasaLink {
                 }
             }
             
-            const stats = await DataManager.getDashboardStats(this.currentUser.uid, this.currentRole, this.currentApartmentAddress);
+            const stats = await DataManager.getDashboardStats(this.currentUser.id || this.currentUser.uid, this.currentRole, this.currentApartmentAddress);
             console.log('📊 Fresh dashboard stats:', stats);
             this.updateDashboardWithRealData(stats);
             
@@ -12456,7 +12709,7 @@ class CasaLink {
             console.log('🔄 Loading dashboard data for selected apartment...');
             
             // Get stats for the current apartment (pass apartment address for filtering)
-            const stats = await DataManager.getDashboardStats(this.currentUser.uid, this.currentRole, this.currentApartmentAddress);
+            const stats = await DataManager.getDashboardStats(this.currentUser.id || this.currentUser.uid, this.currentRole, this.currentApartmentAddress);
             console.log('📊 Dashboard stats for apartment:', stats);
             this.updateDashboardWithRealData(stats);
         } catch (error) {
@@ -13773,8 +14026,9 @@ class CasaLink {
         
         try {
             // Listen for tenant changes
+            const landlordIdForListeners = this.currentUser?.id || this.currentUser?.uid;
             this.tenantsListener = firebaseDb.collection('users')
-                .where('landlordId', '==', this.currentUser.uid)
+                .where('landlordId', '==', landlordIdForListeners)
                 .where('role', '==', 'tenant')
                 .onSnapshot((snapshot) => {
                     console.log('👥 Tenants data changed, refreshing dashboard...');
@@ -13788,7 +14042,7 @@ class CasaLink {
             
             // Listen for lease changes
             this.leasesListener = firebaseDb.collection('leases')
-                .where('landlordId', '==', this.currentUser.uid)
+                .where('landlordId', '==', landlordIdForListeners)
                 .onSnapshot((snapshot) => {
                     console.log('📄 Leases data changed, refreshing dashboard...');
                     // Only refresh if on dashboard AND an apartment is selected (or single apartment)
@@ -13801,7 +14055,7 @@ class CasaLink {
             
             // Listen for bill changes
             this.billsListener = firebaseDb.collection('bills')
-                .where('landlordId', '==', this.currentUser.uid)
+                .where('landlordId', '==', landlordIdForListeners)
                 .onSnapshot((snapshot) => {
                     console.log('💰 Bills data changed, refreshing dashboard...');
                     // Only refresh if on dashboard AND an apartment is selected (or single apartment)
@@ -13814,7 +14068,7 @@ class CasaLink {
                 
             // Listen for maintenance changes
             this.maintenanceListener = firebaseDb.collection('maintenance')
-                .where('landlordId', '==', this.currentUser.uid)
+                .where('landlordId', '==', landlordIdForListeners)
                 .onSnapshot((snapshot) => {
                     console.log('🔧 Maintenance data changed, refreshing dashboard...');
                     // Only refresh if on dashboard AND an apartment is selected (or single apartment)

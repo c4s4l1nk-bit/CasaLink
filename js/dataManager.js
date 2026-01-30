@@ -21,10 +21,12 @@ class DataManager {
             console.log('📡 Fetching units for landlord:', landlordId);
             
             // Query rooms collection and convert to unit format
-            const querySnapshot = await firebaseDb.collection('rooms')
+            const query = firebaseDb.collection('rooms')
+                .where('landlordId', '==', landlordId)
                 .orderBy('floor')
-                .orderBy('roomNumber')
-                .get();
+                .orderBy('roomNumber');
+
+            const querySnapshot = await query.get();
             
             console.log('📊 Query snapshot size:', querySnapshot.size);
             
@@ -81,6 +83,7 @@ class DataManager {
             // Set up the real-time listener for rooms collection
             const unsubscribe = firebaseDb
                 .collection('rooms')
+                .where('landlordId', '==', landlordId)
                 .onSnapshot(
                     (snapshot) => {
                         console.log('📡 Firestore snapshot received');
@@ -1109,11 +1112,14 @@ class DataManager {
         const vacantUnits = Math.max(0, actualTotalUnits - occupiedUnits);
         const occupancyRate = actualTotalUnits > 0 ? Math.round((occupiedUnits / actualTotalUnits) * 100) : 0;
         
-        // Total tenants (active and verified)
-        const activeTenants = tenants.filter(tenant => 
-            tenant.isActive !== false && 
-            (tenant.status === 'verified' || tenant.status === 'active' || !tenant.status)
-        ).length;
+        // Total occupied units (count of active leases, not unique tenants)
+        // This represents how many units are rented
+        const totalOccupiedUnits = occupiedUnits;
+        
+        // Total tenants (count of people) - sum of all occupants from active leases
+        const activeTenants = activeLeases.reduce((sum, lease) => {
+            return sum + (lease.totalOccupants || 1); // Default to 1 if totalOccupants not set
+        }, 0);
         
         // Average monthly rent (only from active leases with rent amount)
         const leasesWithRent = activeLeases.filter(lease => lease.monthlyRent && lease.monthlyRent > 0);
@@ -1172,7 +1178,7 @@ class DataManager {
         
         const stats = {
             // Property Overview
-            totalTenants: activeTenants,
+            totalTenants: activeTenants,  // Now represents total people count
             totalUnits: actualTotalUnits,
             occupiedUnits: occupiedUnits,
             vacantUnits: vacantUnits,
@@ -1216,17 +1222,39 @@ class DataManager {
                     
                     // Filter units by apartment address
                     units = units.filter(u => u.apartmentAddress === apartmentAddress);
-                    const filteredRoomNumbers = units.map(u => u.roomNumber);  // Use room numbers for all filtering
-                    
-                    // Filter leases to only those in the selected apartment (leases use roomNumber field)
-                    leases = leases.filter(l => filteredRoomNumbers.includes(l.roomNumber));
-                    
-                    // Filter bills to only those for units in the selected apartment (bills use roomNumber field)
-                    bills = bills.filter(b => filteredRoomNumbers.includes(b.roomNumber));
-                    
-                    // Filter maintenance to only those for units in the selected apartment (maintenance uses roomNumber field)
-                    maintenanceRequests = maintenanceRequests.filter(m => filteredRoomNumbers.includes(m.roomNumber));
-                    
+                    const filteredRoomNumbers = units.map(u => u.roomNumber);
+                    const filteredRoomIds = units.map(u => u.id);
+
+                    // Robust lease filtering: prefer explicit linkage (roomId, apartmentAddress), then fallback to roomNumber within this apartment
+                    leases = leases.filter(l => {
+                        if (l.roomId && filteredRoomIds.includes(l.roomId)) return true;
+                        if (l.apartmentAddress && l.apartmentAddress === apartmentAddress) return true;
+                        // Fallback: match by roomNumber within this apartment's rooms (not globally)
+                        // BUT: do not match if the lease has explicit apartmentAddress linkage to a DIFFERENT apartment
+                        if (l.roomNumber && filteredRoomNumbers.includes(l.roomNumber)) {
+                            // If lease has apartmentAddress, it must match selected apartment (prevent cross-apartment collisions)
+                            if (l.apartmentAddress && l.apartmentAddress !== apartmentAddress) return false;
+                            return true;
+                        }
+                        return false;
+                    });
+
+                    // Bills: match by roomId, apartmentAddress, or roomNumber within this apartment
+                    bills = bills.filter(b => {
+                        if (b.roomId && filteredRoomIds.includes(b.roomId)) return true;
+                        if (b.apartmentAddress && b.apartmentAddress === apartmentAddress) return true;
+                        if (b.roomNumber && filteredRoomNumbers.includes(b.roomNumber)) return true;
+                        return false;
+                    });
+
+                    // Maintenance: match by roomId, apartmentAddress, or roomNumber within this apartment
+                    maintenanceRequests = maintenanceRequests.filter(m => {
+                        if (m.roomId && filteredRoomIds.includes(m.roomId)) return true;
+                        if (m.apartmentAddress && m.apartmentAddress === apartmentAddress) return true;
+                        if (m.roomNumber && filteredRoomNumbers.includes(m.roomNumber)) return true;
+                        return false;
+                    });
+
                     // Filter tenants to only those in selected apartment's leases
                     const tenantIds = leases.map(l => l.tenantId).filter(Boolean);
                     tenants = tenants.filter(t => tenantIds.includes(t.id));
@@ -2037,6 +2065,144 @@ class DataManager {
 
     static async deleteTenant(tenantId) {
         await firebaseDb.doc(`tenants/${tenantId}`).delete();
+    }
+
+    // ===== DATA MIGRATIONS =====
+    /**
+     * Backfill lease documents so they explicitly reference the room (roomId), apartmentAddress, and propertyId
+     * This helps avoid cross-apartment collisions when multiple apartments reuse room labels like '1A'.
+     *
+     * Returns a summary: { totalChecked, updated, skippedNoMatch, skippedAmbiguous, errors: [] }
+     */
+    static async backfillLeaseApartmentLinks(landlordId) {
+        if (!landlordId) throw new Error('landlordId is required');
+
+        const summary = {
+            totalChecked: 0,
+            updated: 0,
+            skippedNoMatch: 0,
+            skippedAmbiguous: 0,
+            errors: []
+        };
+
+        try {
+            // Load all leases for this landlord
+            const leasesSnap = await firebaseDb.collection('leases').where('landlordId', '==', landlordId).get();
+            const leases = leasesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // Load rooms for this landlord
+            const roomsSnap = await firebaseDb.collection('rooms').where('landlordId', '==', landlordId).get();
+            const rooms = roomsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // Load apartments for this landlord (to resolve propertyId)
+            const apartmentsSnap = await firebaseDb.collection('apartments').where('landlordId', '==', landlordId).get();
+            const apartments = apartmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            // Index rooms by roomNumber and by id
+            const roomsByNumber = new Map();
+            const roomsById = new Map();
+            for (const r of rooms) {
+                if (!roomsByNumber.has(r.roomNumber)) roomsByNumber.set(r.roomNumber, []);
+                roomsByNumber.get(r.roomNumber).push(r);
+                roomsById.set(r.id, r);
+            }
+
+            // Index apartments by address
+            const apartmentsByAddress = new Map();
+            for (const a of apartments) {
+                if (a.apartmentAddress) apartmentsByAddress.set(a.apartmentAddress, a);
+            }
+
+            const batch = firebaseDb.batch();
+
+            for (const lease of leases) {
+                summary.totalChecked++;
+
+                try {
+                    // Skip leases that already have both apartmentAddress and roomId/propertyId set
+                    if ((lease.apartmentAddress || lease.rentalAddress) && (lease.roomId || lease.propertyId)) {
+                        continue;
+                    }
+
+                    let matchedRoom = null;
+
+                    // Prefer explicit roomId on lease
+                    if (lease.roomId && roomsById.has(lease.roomId)) {
+                        matchedRoom = roomsById.get(lease.roomId);
+                    }
+
+                    // If no roomId, attempt to match by roomNumber but only when unique
+                    if (!matchedRoom && lease.roomNumber) {
+                        const candidates = roomsByNumber.get(lease.roomNumber) || [];
+                        if (candidates.length === 1) {
+                            matchedRoom = candidates[0];
+                        } else if (candidates.length > 1) {
+                            // Ambiguous: multiple rooms with same label for this landlord
+                            summary.skippedAmbiguous++;
+                            continue;
+                        }
+                    }
+
+                    if (!matchedRoom) {
+                        summary.skippedNoMatch++;
+                        continue;
+                    }
+
+                    const updates = {};
+                    if (matchedRoom.apartmentAddress && !lease.apartmentAddress) {
+                        updates.apartmentAddress = matchedRoom.apartmentAddress;
+                    }
+                    if (!lease.roomId) updates.roomId = matchedRoom.id;
+
+                    // Resolve property/apartment id if possible
+                    if (matchedRoom.apartmentAddress && !lease.propertyId) {
+                        const apt = apartmentsByAddress.get(matchedRoom.apartmentAddress);
+                        if (apt) updates.propertyId = apt.id;
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        updates.updatedAt = new Date().toISOString();
+                        const leaseRef = firebaseDb.collection('leases').doc(lease.id);
+                        batch.update(leaseRef, updates);
+                        summary.updated++;
+                    }
+
+                } catch (err) {
+                    summary.errors.push({ leaseId: lease.id, message: err.message });
+                }
+            }
+
+            // Commit batch if any updates
+            if (summary.updated > 0) await batch.commit();
+
+            return summary;
+
+        } catch (error) {
+            console.error('❌ Error running backfillLeaseApartmentLinks:', error);
+            throw error;
+        }
+    }
+
+    // ===== Activity Logging =====
+    /**
+     * Log a custom activity for landlord or tenant
+     * activity: { type, title, description, icon, color, data }
+     */
+    static async logActivity(landlordId, activity) {
+        if (!landlordId) throw new Error('landlordId is required');
+        const payload = {
+            landlordId,
+            type: activity.type || 'custom',
+            title: activity.title || 'Activity',
+            description: activity.description || '',
+            icon: activity.icon || 'fas fa-info-circle',
+            color: activity.color || 'var(--info)',
+            data: activity.data || {},
+            timestamp: activity.timestamp || new Date().toISOString()
+        };
+
+        const docRef = await firebaseDb.collection('activities').add(payload);
+        return { id: docRef.id, ...payload };
     }
 
     static async updateBill(billId, updates) {
