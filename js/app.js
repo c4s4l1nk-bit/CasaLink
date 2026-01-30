@@ -3243,31 +3243,6 @@ class CasaLink {
                     </div>
                 </div>
                 
-                <!-- Legend -->
-                <div class="unit-legend" style="
-                    background: white;
-                    padding: 15px 20px;
-                    border-radius: 8px;
-                    border: 1px solid #e9ecef;
-                    margin-bottom: 25px;
-                    display: flex;
-                    align-items: center;
-                    gap: 25px;
-                    flex-wrap: wrap;
-                ">
-                    <div style="font-weight: 600; color: var(--text-dark);">Unit Status:</div>
-                    <div style="display: flex; gap: 20px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div style="width: 14px; height: 14px; border-radius: 4px; background: var(--success); border: 1px solid var(--success);"></div>
-                            <span style="font-size: 0.9rem;">Occupied</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div style="width: 14px; height: 14px; border-radius: 4px; background: #f8f9fa; border: 1px solid #dc3545;"></div>
-                            <span style="font-size: 0.9rem;">Vacant</span>
-                        </div>
-                    </div>
-                </div>
-                
                 <!-- Floor Layouts -->
                 <div class="floor-layouts-container">
                     ${this.generateFloorLayouts(unitsByFloorData)}
