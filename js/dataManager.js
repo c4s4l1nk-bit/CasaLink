@@ -305,6 +305,96 @@ class DataManager {
         }
     }
 
+    static async createApartment(apartmentData) {
+        if (!apartmentData) throw new Error('Missing apartment data');
+        try {
+            const landlordId = apartmentData.landlordId || (typeof window !== 'undefined' && window.currentUser ? window.currentUser.uid : null);
+            if (!landlordId) throw new Error('User not authenticated');
+
+            const payload = {
+                landlordId,
+                landlordName: apartmentData.landlordName || '',
+                apartmentAddress: apartmentData.apartmentAddress || '',
+                numberOfRooms: apartmentData.numberOfRooms || 0,
+                description: apartmentData.description || '',
+                isActive: apartmentData.isActive === undefined ? true : !!apartmentData.isActive,
+                createdAt: apartmentData.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            const docRef = await firebaseDb.collection('apartments').add(payload);
+            console.log('✅ Apartment created with ID:', docRef.id);
+            return { id: docRef.id, ...payload };
+        } catch (error) {
+            console.error('❌ Error creating apartment:', error);
+            throw error;
+        }
+    }
+
+    static async createApartmentWithRooms(apartmentData, roomsData) {
+        if (!apartmentData || !roomsData || roomsData.length === 0) {
+            throw new Error('Missing apartment or rooms data');
+        }
+
+        try {
+            const landlordId = apartmentData.landlordId || (typeof window !== 'undefined' && window.currentUser ? window.currentUser.uid : null);
+            if (!landlordId) throw new Error('User not authenticated');
+
+            const now = new Date().toISOString();
+
+            // Create apartment
+            const apartmentPayload = {
+                landlordId,
+                landlordName: apartmentData.landlordName || '',
+                apartmentAddress: apartmentData.apartmentAddress || '',
+                numberOfRooms: apartmentData.numberOfRooms || 0,
+                numberOfFloors: apartmentData.numberOfFloors || 1,
+                description: apartmentData.description || '',
+                isActive: true,
+                createdAt: now,
+                updatedAt: now
+            };
+
+            const apartmentRef = await firebaseDb.collection('apartments').add(apartmentPayload);
+            console.log('✅ Apartment created with ID:', apartmentRef.id);
+
+            // Batch create rooms
+            const batch = firebaseDb.batch();
+            roomsData.forEach((room) => {
+                const roomPayload = {
+                    landlordId,
+                    apartmentAddress: apartmentData.apartmentAddress,
+                    roomNumber: room.roomNumber || '',
+                    floor: String(room.floor || '1'),
+                    monthlyRent: parseFloat(room.monthlyRent) || 0,
+                    securityDeposit: parseFloat(room.securityDeposit) || 0,
+                    numberOfBedrooms: parseInt(room.numberOfBedrooms, 10) || 0,
+                    numberOfBathrooms: parseFloat(room.numberOfBathrooms) || 0,
+                    maxMembers: parseInt(room.maxMembers, 10) || 1,
+                    numberOfMembers: 0,
+                    isAvailable: true,
+                    createdAt: now,
+                    updatedAt: now
+                };
+
+                const roomRef = firebaseDb.collection('rooms').doc();
+                batch.set(roomRef, roomPayload);
+            });
+
+            await batch.commit();
+            console.log('✅ Batch created', roomsData.length, 'rooms');
+
+            return {
+                apartmentId: apartmentRef.id,
+                apartmentData: { id: apartmentRef.id, ...apartmentPayload },
+                roomsCreated: roomsData.length
+            };
+        } catch (error) {
+            console.error('❌ Error creating apartment with rooms:', error);
+            throw error;
+        }
+    }
+
     static async getLease(leaseId) {
         if (!leaseId) throw new Error('Missing leaseId');
         try {

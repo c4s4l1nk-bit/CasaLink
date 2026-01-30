@@ -568,18 +568,21 @@ class CasaLink {
             }
 
             // Setup page-specific events
-            this.setupPageEvents(page);
+            await this.setupPageEvents(page);
 
             // Update nav state
             this.updateActiveNavState(page);
 
             // SPECIAL CASE: DASHBOARD (MERGED FROM BOTH VERSIONS)
             if (page === 'dashboard') {
-                console.log('📊 Force refreshing dashboard data and setting up listeners...');
+                console.log('📊 Force refreshing dashboard stats and setting up listeners...');
                 setTimeout(() => {
-                    this.loadDashboardData();
+                    // Load dashboard stats (cards, etc) - but not unit layout since setupDashboardEvents handles it
+                    const stats = DataManager.getDashboardStats(this.currentUser.uid, this.currentRole)
+                        .then(s => this.updateDashboardWithRealData(s))
+                        .catch(e => this.showDashboardErrorState());
                     this.setupRealTimeStats();
-                    // Recent activities handled internally
+                    // Unit layout and recent activities handled in setupDashboardEvents
                 }, 100);
             }
 
@@ -1226,6 +1229,15 @@ class CasaLink {
                 return false;
             }
             this.lastCardClick = Date.now();
+
+            // CHECK: Ensure an apartment is selected before showing details
+            if (!this.currentApartmentAddress && !this.currentApartmentId) {
+                console.log('⚠️ No apartment selected - showing selection message');
+                if (window.notificationManager && typeof window.notificationManager.error === 'function') {
+                    window.notificationManager.error('Please select an apartment from the "Viewing" dropdown to view details');
+                }
+                return false;
+            }
 
             // 🌟 Dashboard > Property Overview Cards
             if (cardType === 'occupancy') {
@@ -2106,7 +2118,7 @@ class CasaLink {
         this.showNotification('All activities marked as read', 'success');
     }
 
-    setupDashboardEvents() {
+    async setupDashboardEvents() {
         console.log('🔄 Setting up dashboard events with fresh data...');
         
         // Add Property Button
@@ -2114,8 +2126,31 @@ class CasaLink {
             this.showAddPropertyForm();
         });
         
-        // Setup apartment selector dropdown
-        this.setupApartmentSelector();
+        // Setup apartment selector dropdown (AWAIT to ensure it completes before loading units)
+        const selectorResult = await this.setupApartmentSelector();
+        const apartmentCount = selectorResult?.count || 0;
+
+        console.log(`📊 Apartment count: ${apartmentCount}`);
+
+        // Smart display logic based on apartment count
+        if (apartmentCount === 0) {
+            // No apartments: Show message to add property first
+            console.log('ℹ️ No apartments found - showing add property message');
+            this.showUnitLayoutPlaceholder('add-property', null);
+            this.initializeDashboardStatsToZero();
+            this.shouldAutoLoadUnitLayout = false;
+        } else if (apartmentCount === 1) {
+            // One apartment: Auto-display it
+            console.log('✅ Only one apartment found - auto-displaying');
+            this.shouldAutoLoadUnitLayout = true;
+            await this.loadAndDisplayUnitLayoutInDashboard();
+        } else {
+            // Multiple apartments: Show selection message and init stats to 0
+            console.log(`⚠️ Multiple apartments (${apartmentCount}) found - showing selection message`);
+            this.showUnitLayoutPlaceholder('select-apartment', apartmentCount);
+            this.initializeDashboardStatsToZero();
+            this.shouldAutoLoadUnitLayout = false;
+        }
         
         // Load recent activities when dashboard is shown 
         setTimeout(() => {
@@ -2135,7 +2170,7 @@ class CasaLink {
             const selector = document.getElementById('apartmentSelector');
             if (!selector) {
                 console.warn('⚠️ Apartment selector not found');
-                return;
+                return { count: 0 };
             }
             
             // Fetch landlord's apartments
@@ -2146,38 +2181,73 @@ class CasaLink {
             if (apartments.length === 0) {
                 selector.innerHTML = '<option value="">No apartments found - Add one first</option>';
                 selector.disabled = true;
-                return;
+                this.apartmentsList = [];
+                this.currentApartmentId = null;
+                this.currentApartmentAddress = null;
+                return { count: 0 };
             }
             
             // Populate dropdown with apartments
             if (apartments.length > 0) {
-                const options = apartments.map((apt, index) => `
+                // For single apartment: no placeholder needed, select it directly
+                // For multiple apartments: add placeholder option first
+                let optionsHTML = '';
+                
+                if (apartments.length > 1) {
+                    optionsHTML = '<option value="">Select an Apartment To view</option>';
+                }
+                
+                const apartmentOptions = apartments.map((apt, index) => `
                     <option value="${apt.id}" data-address="${apt.apartmentAddress || ''}" data-rooms="${apt.numberOfRooms || 0}">
                         ${apt.apartmentAddress || 'Apartment'} (${apt.numberOfRooms || 0} units)
                     </option>
                 `).join('');
+                
+                optionsHTML += apartmentOptions;
+                selector.innerHTML = optionsHTML;
 
-                selector.innerHTML = options;
-
-                // Set first apartment as selected and store its address for filtering
-                selector.value = apartments[0].id;
-                this.currentApartmentId = apartments[0].id;
-                this.currentApartmentAddress = apartments[0].apartmentAddress || null;
+                // Only select first apartment if there's only one (auto-select)
+                // For multiple apartments: leave nothing selected initially
+                if (apartments.length === 1) {
+                    selector.value = apartments[0].id;
+                    this.currentApartmentId = apartments[0].id;
+                    this.currentApartmentAddress = apartments[0].apartmentAddress || null;
+                    console.log('✅ Single apartment auto-selected:', apartments[0].apartmentAddress);
+                } else {
+                    // Multiple apartments: don't select by default
+                    selector.value = '';
+                    this.currentApartmentId = null;
+                    this.currentApartmentAddress = null;
+                    console.log('ℹ️ Multiple apartments available - waiting for user selection');
+                }
+                
                 this.apartmentsList = apartments;
-                console.log('✅ Default apartment selected:', apartments[0].apartmentAddress);
 
                 // Setup change event
                 selector.addEventListener('change', (e) => {
+                    if (!e.target.value) {
+                        // User cleared selection
+                        this.currentApartmentId = null;
+                        this.currentApartmentAddress = null;
+                        this.shouldAutoLoadUnitLayout = false;
+                        console.log('🔄 Apartment selection cleared');
+                        return;
+                    }
+                    
                     const selectedApartment = this.apartmentsList.find(apt => apt.id === e.target.value);
                     if (selectedApartment) {
                         this.currentApartmentId = selectedApartment.id;
                         this.currentApartmentAddress = selectedApartment.apartmentAddress || null;
+                        this.shouldAutoLoadUnitLayout = true; // User manually selected, load it
                         console.log('🔄 Switched to apartment:', selectedApartment.apartmentAddress);
 
-                        // Reload unit layout for selected apartment
+                        // Reload unit layout and stats for selected apartment
                         this.loadAndDisplayUnitLayoutInDashboard();
+                        this.loadDashboardDataForSelectedApartment();
                     }
                 });
+                
+                return { count: apartments.length };
             } else {
                 // Fallback: derive apartments from rooms if no apartments collection exists yet
                 console.log('ℹ️ No apartments found for landlord, deriving from rooms...');
@@ -2190,42 +2260,361 @@ class CasaLink {
                     this.apartmentsList = [];
                     this.currentApartmentId = null;
                     this.currentApartmentAddress = null;
-                    return;
+                    return { count: 0 };
                 }
 
                 // Build options from addresses
-                const options = addresses.map(addr => `
+                let optionsHTML = '';
+                
+                if (addresses.length > 1) {
+                    optionsHTML = '<option value="">Select an Apartment To view</option>';
+                }
+                
+                const addressOptions = addresses.map(addr => `
                     <option value="${addr}">${addr}</option>
                 `).join('');
-
-                selector.innerHTML = options;
+                
+                optionsHTML += addressOptions;
+                selector.innerHTML = optionsHTML;
                 selector.disabled = false;
 
-                // Select first address by default
-                selector.value = addresses[0];
-                this.currentApartmentId = null;
-                this.currentApartmentAddress = addresses[0];
+                // Only select first address if there's only one (auto-select)
+                // For multiple addresses: leave nothing selected initially
+                if (addresses.length === 1) {
+                    selector.value = addresses[0];
+                    this.currentApartmentId = null;
+                    this.currentApartmentAddress = addresses[0];
+                    console.log('✅ Single apartment auto-selected (derived):', addresses[0]);
+                } else {
+                    selector.value = '';
+                    this.currentApartmentId = null;
+                    this.currentApartmentAddress = null;
+                    console.log('ℹ️ Multiple apartments available (derived) - waiting for user selection');
+                }
+                
                 this.apartmentsList = addresses;
 
                 selector.addEventListener('change', (e) => {
+                    if (!e.target.value) {
+                        // User cleared selection
+                        this.currentApartmentId = null;
+                        this.currentApartmentAddress = null;
+                        this.shouldAutoLoadUnitLayout = false;
+                        console.log('🔄 Apartment selection cleared (derived)');
+                        return;
+                    }
+                    
                     this.currentApartmentId = null;
                     this.currentApartmentAddress = e.target.value || null;
+                    this.shouldAutoLoadUnitLayout = true; // User manually selected, load it
                     console.log('🔄 Switched to apartment (derived):', this.currentApartmentAddress);
                     this.loadAndDisplayUnitLayoutInDashboard();
+                    this.loadDashboardDataForSelectedApartment();
                 });
+                
+                return { count: addresses.length };
             }
             
-            console.log('✅ Apartment selector setup complete');
         } catch (error) {
             console.error('❌ Error setting up apartment selector:', error);
             const selector = document.getElementById('apartmentSelector');
             if (selector) {
                 selector.innerHTML = '<option value="">Error loading apartments</option>';
             }
+            return { count: 0 };
         }
     }
 
+    showUnitLayoutPlaceholder(type, apartmentCount = null) {
+        const container = document.querySelector('.unit-grid-container');
+        if (!container) {
+            console.warn('⚠️ Unit grid container not found');
+            return;
+        }
+
+        let placeholderHTML = '';
+
+        if (type === 'add-property') {
+            placeholderHTML = `
+                <div style="padding: 60px 40px; text-align: center; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); border-radius: 12px; min-height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <div style="margin-bottom: 30px;">
+                        <i class="fas fa-building" style="font-size: 4rem; color: #1A73E8; opacity: 0.7;"></i>
+                    </div>
+                    <h3 style="color: var(--royal-blue); margin-bottom: 15px; font-weight: 600;">No Apartments Yet</h3>
+                    <p style="color: var(--gray-700); font-size: 1rem; margin-bottom: 25px; max-width: 500px;">
+                        You don't have any apartments added yet. Start by creating your first property to manage units and tenants.
+                    </p>
+                    <button class="btn btn-primary" style="padding: 12px 30px; font-weight: 600;" onclick="casaLink.showAddPropertyForm()">
+                        <i class="fas fa-plus" style="margin-right: 8px;"></i> Add Your First Property
+                    </button>
+                </div>
+            `;
+        } else if (type === 'select-apartment') {
+            placeholderHTML = `
+                <div style="padding: 60px 40px; text-align: center; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 12px; min-height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                    <div style="margin-bottom: 30px;">
+                        <i class="fas fa-list" style="font-size: 4rem; color: #FF6B35; opacity: 0.7;"></i>
+                    </div>
+                    <h3 style="color: #FF6B35; margin-bottom: 15px; font-weight: 600;">Multiple Properties</h3>
+                    <p style="color: var(--gray-700); font-size: 1rem; margin-bottom: 25px; max-width: 500px;">
+                        You own <strong>${apartmentCount} apartment${apartmentCount !== 1 ? 's' : ''}</strong>. 
+                        <br><br>
+                        Please select an apartment from the <strong>"Viewing"</strong> dropdown menu above to view and manage its units.
+                    </p>
+                    <div style="margin-top: 30px;">
+                        <i class="fas fa-arrow-up" style="font-size: 2rem; color: #FF6B35; opacity: 0.5; animation: bounce 2s infinite;"></i>
+                    </div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = placeholderHTML;
+        console.log(`✅ Displayed ${type} placeholder`);
+    }
+
     
+    async showAddPropertyForm() {
+        try {
+            // STEP 1: Basic Apartment Information
+            const step1HTML = `
+                <div class="add-property-step1">
+                    <h5 style="margin-bottom: 25px; color: var(--royal-blue);">Step 1: Basic Apartment Information</h5>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Apartment Address *</label>
+                        <input type="text" id="apartmentAddress" class="form-input" placeholder="Enter Apartment Address" required>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="form-group">
+                            <label class="form-label">Number of Floors *</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button type="button" class="btn btn-sm" onclick="this.nextElementSibling.value = Math.max(1, parseInt(this.nextElementSibling.value) - 1)">−</button>
+                                <input type="number" id="numberOfFloors" class="form-input" min="1" value="1" style="text-align: center; flex: 1;" readonly>
+                                <button type="button" class="btn btn-sm" onclick="this.previousElementSibling.value = parseInt(this.previousElementSibling.value) + 1">+</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Number of Rooms *</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button type="button" class="btn btn-sm" onclick="this.nextElementSibling.value = Math.max(1, parseInt(this.nextElementSibling.value) - 1)">−</button>
+                                <input type="number" id="numberOfRooms" class="form-input" min="1" value="1" style="text-align: center; flex: 1;" readonly>
+                                <button type="button" class="btn btn-sm" onclick="this.previousElementSibling.value = parseInt(this.previousElementSibling.value) + 1">+</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea id="apartmentDescription" class="form-input" rows="3" placeholder="Optional description"></textarea>
+                    </div>
+
+                    <div style="margin-top: 25px; display: flex; gap: 10px; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="nextToStep2Btn">Next: Add Room Details</button>
+                    </div>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(step1HTML, {
+                title: 'Add New Apartment',
+                showFooter: false,
+                width: '600px'
+            });
+
+            // Step 1 → Step 2
+            const nextBtn = modal.querySelector('#nextToStep2Btn');
+            nextBtn.addEventListener('click', async () => {
+                const addr = modal.querySelector('#apartmentAddress').value.trim();
+                const floors = parseInt(modal.querySelector('#numberOfFloors').value, 10) || 1;
+                const rooms = parseInt(modal.querySelector('#numberOfRooms').value, 10) || 1;
+                const desc = modal.querySelector('#apartmentDescription').value.trim();
+
+                if (!addr) {
+                    if (window.notificationManager && typeof window.notificationManager.error === 'function') {
+                        window.notificationManager.error('Please enter an apartment address');
+                    }
+                    return;
+                }
+                if (floors <= 0 || rooms <= 0) {
+                    if (window.notificationManager && typeof window.notificationManager.error === 'function') {
+                        window.notificationManager.error('Floors and rooms must be at least 1');
+                    }
+                    return;
+                }
+
+                // Store for later use
+                window.apartmentFormData = { address: addr, floors, rooms, description: desc };
+
+                // Show Step 2
+                this.showAddPropertyStep2(modal, floors, rooms);
+            });
+
+        } catch (error) {
+            console.error('❌ Error showing add property form:', error);
+            if (window.notificationManager && typeof window.notificationManager.error === 'function') {
+                window.notificationManager.error('Error opening add property form');
+            }
+        }
+    }
+
+    showAddPropertyStep2(modal, numberOfFloors, numberOfRooms) {
+        // Generate room form fields for each room
+        let roomFormsHTML = '';
+        for (let i = 1; i <= numberOfRooms; i++) {
+            const floorOptions = Array.from({ length: numberOfFloors }, (_, idx) => `
+                <option value="${idx + 1}">Floor ${idx + 1}</option>
+            `).join('');
+
+            roomFormsHTML += `
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h6 style="margin-bottom: 15px; color: var(--royal-blue);">Room ${i}</h6>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label class="form-label">Unit/Room Number *</label>
+                            <input type="text" class="room-number form-input" placeholder="e.g 1A, 2A, 3A" data-room-index="${i}">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Floor *</label>
+                            <select class="room-floor form-input" data-room-index="${i}">
+                                ${floorOptions}
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Monthly Rent (₱) *</label>
+                            <input type="number" class="room-rent form-input" min="0" step="100" value="5000" data-room-index="${i}">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Security Deposit (₱) *</label>
+                            <input type="number" class="room-deposit form-input" min="0" step="100" value="5000" data-room-index="${i}">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Bedrooms *</label>
+                            <input type="number" class="room-bedrooms form-input" min="0" value="1" data-room-index="${i}">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Bathrooms *</label>
+                            <input type="number" class="room-bathrooms form-input" min="0" step="0.5" value="1" data-room-index="${i}">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Max Members *</label>
+                            <input type="number" class="room-maxmembers form-input" min="1" value="1" data-room-index="${i}">
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const step2HTML = `
+            <div class="add-property-step2">
+                <h5 style="margin-bottom: 25px; color: var(--royal-blue);">Step 2: Room Details</h5>
+                <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+                    ${roomFormsHTML}
+                </div>
+
+                <div style="margin-top: 25px; display: flex; gap: 10px; justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" id="backToStep1Btn">Back</button>
+                    <button type="button" class="btn btn-primary" id="createApartmentBtn">Create Apartment & Rooms</button>
+                </div>
+            </div>
+        `;
+
+        // Update modal body
+        modal.querySelector('.modal-body').innerHTML = step2HTML;
+
+        // Back button
+        modal.querySelector('#backToStep1Btn').addEventListener('click', () => {
+            this.showAddPropertyForm();
+        });
+
+        // Submit button
+        modal.querySelector('#createApartmentBtn').addEventListener('click', async () => {
+            const data = window.apartmentFormData;
+            const roomsData = [];
+            let isValid = true;
+
+            // Collect room data
+            for (let i = 1; i <= numberOfRooms; i++) {
+                const roomNum = modal.querySelector(`.room-number[data-room-index="${i}"]`).value.trim();
+                const floor = modal.querySelector(`.room-floor[data-room-index="${i}"]`).value;
+                const rent = parseFloat(modal.querySelector(`.room-rent[data-room-index="${i}"]`).value) || 0;
+                const deposit = parseFloat(modal.querySelector(`.room-deposit[data-room-index="${i}"]`).value) || 0;
+                const bedrooms = parseInt(modal.querySelector(`.room-bedrooms[data-room-index="${i}"]`).value, 10) || 0;
+                const bathrooms = parseFloat(modal.querySelector(`.room-bathrooms[data-room-index="${i}"]`).value) || 0;
+                const maxMembers = parseInt(modal.querySelector(`.room-maxmembers[data-room-index="${i}"]`).value, 10) || 1;
+
+                if (!roomNum) {
+                    if (window.notificationManager && typeof window.notificationManager.error === 'function') {
+                        window.notificationManager.error(`Please enter room number for Room ${i}`);
+                    }
+                    isValid = false;
+                    break;
+                }
+
+                roomsData.push({
+                    roomNumber: roomNum,
+                    floor,
+                    monthlyRent: rent,
+                    securityDeposit: deposit,
+                    numberOfBedrooms: bedrooms,
+                    numberOfBathrooms: bathrooms,
+                    maxMembers
+                });
+            }
+
+            if (!isValid || roomsData.length === 0) {
+                return;
+            }
+
+            try {
+                modal.querySelector('#createApartmentBtn').disabled = true;
+
+                const result = await DataManager.createApartmentWithRooms(
+                    {
+                        apartmentAddress: data.address,
+                        numberOfFloors: data.floors,
+                        numberOfRooms: data.rooms,
+                        description: data.description,
+                        landlordName: (this.currentUser && (this.currentUser.displayName || this.currentUser.email)) || ''
+                    },
+                    roomsData
+                );
+
+                if (window.notificationManager && typeof window.notificationManager.success === 'function') {
+                    window.notificationManager.success(`Apartment created with ${result.roomsCreated} rooms!`);
+                }
+                ModalManager.closeModal(modal);
+
+                // Refresh selector and select new apartment
+                await this.setupApartmentSelector();
+                const selector = document.getElementById('apartmentSelector');
+                if (selector) {
+                    selector.value = result.apartmentId;
+                    this.currentApartmentId = result.apartmentId;
+                    this.currentApartmentAddress = data.address;
+                    this.loadAndDisplayUnitLayoutInDashboard();
+                }
+
+                window.apartmentFormData = null;
+
+            } catch (error) {
+                console.error('Error creating apartment:', error);
+                if (window.notificationManager && typeof window.notificationManager.error === 'function') {
+                    window.notificationManager.error('Error: ' + (error.message || 'Unknown'));
+                }
+                modal.querySelector('#createApartmentBtn').disabled = false;
+            }
+        });
+    }
+
     async addNewUnit() {
         try {
             const modalContent = `
@@ -2671,6 +3060,12 @@ class CasaLink {
         try {
             console.log('🏢 Loading unit layout for dashboard display...');
             
+            // SAFETY CHECK: Ensure an apartment is actually selected
+            if (!this.currentApartmentAddress && !this.currentApartmentId) {
+                console.warn('⚠️ No apartment selected - aborting unit layout load');
+                return;
+            }
+            
             // Get the container element
             const container = document.querySelector('.unit-grid-container');
             if (!container) {
@@ -2701,19 +3096,21 @@ class CasaLink {
             // Enrich units with tenant names
             const enrichedUnits = this.enrichUnitsWithTenantData(units, tenants, leases);
 
-            // Filter by selected apartment if present (supports apartmentAddress fallback)
-            let displayUnits = enrichedUnits;
+            // Filter by selected apartment (REQUIRED - only show rooms from the selected apartment)
+            let displayUnits = [];
             if (this.currentApartmentAddress) {
+                console.log(`🏢 Filtering units by apartment address: ${this.currentApartmentAddress}`);
                 displayUnits = enrichedUnits.filter(u => u.apartmentAddress === this.currentApartmentAddress);
             } else if (this.currentApartmentId && this.apartmentsList && Array.isArray(this.apartmentsList)) {
                 const apt = this.apartmentsList.find(a => a.id === this.currentApartmentId);
                 if (apt && apt.apartmentAddress) {
+                    console.log(`🏢 Filtering units by apartment ID: ${apt.apartmentAddress}`);
                     displayUnits = enrichedUnits.filter(u => u.apartmentAddress === apt.apartmentAddress);
                 }
             }
 
             if (!displayUnits || displayUnits.length === 0) {
-                console.log('ℹ️ No units found');
+                console.log('ℹ️ No units found for selected apartment');
                 container.innerHTML = `
                     <div style="padding: 40px; text-align: center;">
                         <i class="fas fa-inbox" style="font-size: 2rem; color: var(--gray-400); margin-bottom: 20px;"></i>
@@ -3031,23 +3428,40 @@ class CasaLink {
                     // Only update if container is still in the DOM
                     if (container && document.body.contains(container)) {
                         try {
-                            // Fetch fresh tenant and lease data to enrich the updated units
+                            // FILTER units by selected apartment FIRST
+                            let filteredUnits = updatedUnits;
+                            if (this.currentApartmentAddress) {
+                                console.log(`🏢 Filtering real-time units by apartment: ${this.currentApartmentAddress}`);
+                                filteredUnits = updatedUnits.filter(u => u.apartmentAddress === this.currentApartmentAddress);
+                            } else if (this.currentApartmentId && this.apartmentsList && Array.isArray(this.apartmentsList)) {
+                                const apt = this.apartmentsList.find(a => a.id === this.currentApartmentId);
+                                if (apt && apt.apartmentAddress) {
+                                    console.log(`🏢 Filtering real-time units by apartment ID: ${apt.apartmentAddress}`);
+                                    filteredUnits = updatedUnits.filter(u => u.apartmentAddress === apt.apartmentAddress);
+                                }
+                            }
+                            
+                            // Fetch fresh tenant and lease data to enrich the filtered units
                             const [tenants, leases] = await Promise.all([
                                 DataManager.getTenants(this.currentUser.uid),
                                 DataManager.getLandlordLeases(this.currentUser.uid)
                             ]);
                             
-                            // Enrich updated units with tenant data before displaying
-                            const enrichedUpdatedUnits = this.enrichUnitsWithTenantData(updatedUnits, tenants, leases);
+                            // Enrich FILTERED units with tenant data before displaying
+                            const enrichedUpdatedUnits = this.enrichUnitsWithTenantData(filteredUnits, tenants, leases);
                             
                             const layoutHTML = this.generateInlineUnitLayoutHTML(enrichedUpdatedUnits);
                             container.innerHTML = layoutHTML;
                             this.setupUnitClickHandlers(container);
-                            console.log('✅ Inline layout updated with enriched real-time data');
+                            console.log(`✅ Inline layout updated with ${enrichedUpdatedUnits.length} enriched real-time units from selected apartment`);
                         } catch (error) {
                             console.warn('⚠️ Error enriching real-time units:', error);
-                            // Fallback to displaying without enrichment
-                            const layoutHTML = this.generateInlineUnitLayoutHTML(updatedUnits);
+                            // Fallback to displaying without enrichment but with filtering
+                            let filteredUnits = updatedUnits;
+                            if (this.currentApartmentAddress) {
+                                filteredUnits = updatedUnits.filter(u => u.apartmentAddress === this.currentApartmentAddress);
+                            }
+                            const layoutHTML = this.generateInlineUnitLayoutHTML(filteredUnits);
                             container.innerHTML = layoutHTML;
                             this.setupUnitClickHandlers(container);
                         }
@@ -5744,10 +6158,10 @@ class CasaLink {
         this.showNotification(`Showing data for: ${period}`, 'info');
     }
 
-    setupPageEvents(page) {
+    async setupPageEvents(page) {
         switch (page) {
             case 'dashboard':
-                this.setupDashboardEvents();
+                await this.setupDashboardEvents();
                 break;
             case 'billing':
                 this.setupBillingPage();
@@ -11103,20 +11517,70 @@ class CasaLink {
     async loadDashboardData() {
         try {
             console.log('🔄 Loading FRESH dashboard data...');
+            
+            // For landlords with multiple apartments and no selection: show 0 stats
+            if (this.currentRole === 'landlord') {
+                const apartments = await DataManager.getLandlordApartments(this.currentUser.uid);
+                if (apartments.length > 1 && !this.currentApartmentAddress && !this.currentApartmentId) {
+                    console.log('ℹ️ Multiple apartments with no selection - initializing stats to 0');
+                    this.initializeDashboardStatsToZero();
+                    return;
+                }
+            }
+            
             const stats = await DataManager.getDashboardStats(this.currentUser.uid, this.currentRole);
             console.log('📊 Fresh dashboard stats:', stats);
             this.updateDashboardWithRealData(stats);
             
-            // Auto-load unit layout for landlords
-            if (this.currentRole === 'landlord') {
-                console.log('🏢 Auto-loading unit layout for landlord...');
-                await this.loadAndDisplayUnitLayoutInDashboard();
+            // Auto-load unit layout for landlords ONLY if appropriate
+            if (this.currentRole === 'landlord' && this.shouldAutoLoadUnitLayout !== false) {
+                // Check current state - only load if:
+                // 1. Single apartment (shouldAutoLoadUnitLayout = true), OR
+                // 2. User has selected a specific apartment from dropdown
+                if (this.shouldAutoLoadUnitLayout === true) {
+                    console.log('✅ Auto-loading unit layout (single apartment)');
+                    await this.loadAndDisplayUnitLayoutInDashboard();
+                } else if (this.currentApartmentAddress && this.currentApartmentAddress !== '') {
+                    console.log('✅ Loading selected apartment unit layout');
+                    await this.loadAndDisplayUnitLayoutInDashboard();
+                }
+                // Otherwise: shouldAutoLoadUnitLayout = false (multiple apartments), don't load
             }
         } catch (error) {
             console.log('❌ Dashboard data loading failed:', error);
             // Show error state in the cards
             this.showDashboardErrorState();
         }
+    }
+
+    async loadDashboardDataForSelectedApartment() {
+        try {
+            console.log('🔄 Loading dashboard data for selected apartment...');
+            
+            // Get stats for the current apartment
+            const stats = await DataManager.getDashboardStats(this.currentUser.uid, this.currentRole);
+            console.log('📊 Dashboard stats for apartment:', stats);
+            this.updateDashboardWithRealData(stats);
+        } catch (error) {
+            console.log('❌ Failed to load dashboard data for selected apartment:', error);
+            this.showDashboardErrorState();
+        }
+    }
+
+    initializeDashboardStatsToZero() {
+        // Initialize all dashboard stat cards to 0
+        const cards = document.querySelectorAll('.dashboard-cards .card');
+        cards.forEach(card => {
+            const valueElement = card.querySelector('.card-value');
+            if (valueElement) {
+                valueElement.textContent = '0';
+            }
+            const changeElement = card.querySelector('.card-change');
+            if (changeElement) {
+                changeElement.innerHTML = '<span style="color: var(--gray-500);">Select an apartment to view</span>';
+            }
+        });
+        console.log('✅ Dashboard stats initialized to 0');
     }
 
     showDashboardErrorState() {
