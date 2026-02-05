@@ -9258,43 +9258,57 @@ class CasaLink {
         
         let reportHTML = `
             <div class="printable-report" style="padding: 40px; background: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                <!-- Header -->
-                <div style="text-align: center; margin-bottom: 40px; border-bottom: 4px solid #1e3a8a; padding-bottom: 25px;">
-                    <h1 style="margin: 0 0 15px 0; color: #1e3a8a; font-size: 2.8rem; font-weight: 800;">📊 COMPREHENSIVE PROPERTY REPORT</h1>
-                    <p style="margin: 5px 0; color: #475569; font-size: 1.15rem; font-weight: 500;">Complete Property Management & Financial Analytics Overview</p>
-                    <p style="margin: 5px 0; color: #64748b; font-size: 0.9rem;">Detailed Performance Metrics and Operational Insights</p>
-                    <p style="margin: 15px 0 0 0; color: #94a3b8; font-size: 0.85rem;">Generated: ${currentDateTime}</p>
-                    <p style="margin: 3px 0; color: #cbd5e1; font-size: 0.8rem;">Report Period: ${currentDate}</p>
+                <!-- Professional Header -->
+                <div style="text-align: center; margin-bottom: 45px; border-bottom: 3px solid #1e3a8a; padding-bottom: 30px;">
+                    <h1 style="margin: 0 0 10px 0; color: #1e3a8a; font-size: 32px; font-weight: 900; letter-spacing: -0.5px;">COMPREHENSIVE PROPERTY REPORT</h1>
+                    <p style="margin: 8px 0 0 0; color: #64748b; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Property Portfolio Performance & Analytics</p>
+                    
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; text-align: left;">
+                            <div>
+                                <p style="margin: 0; color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase;">Report Generated</p>
+                                <p style="margin: 5px 0 0 0; color: #1e3a8a; font-size: 13px; font-weight: 600;">${currentDateTime}</p>
+                            </div>
+                            <div>
+                                <p style="margin: 0; color: #94a3b8; font-size: 11px; font-weight: 600; text-transform: uppercase;">Report Period</p>
+                                <p style="margin: 5px 0 0 0; color: #1e3a8a; font-size: 13px; font-weight: 600;">${currentDate}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- EXECUTIVE SUMMARY SECTION -->
-                <div style="margin-bottom: 35px; page-break-inside: avoid;">
-                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 10px 0; font-size: 1.4rem;">🎯 EXECUTIVE SUMMARY</h2>
-                    <p style="color: #64748b; font-size: 0.9rem; margin: 0 0 15px 0;">Quick overview of your property portfolio performance and key operational metrics at a glance.</p>
+                <div style="margin-bottom: 40px; page-break-inside: avoid;">
+                    <h2 style="color: #fff; background: #1e3a8a; padding: 12px 15px; margin: 0 0 20px 0; font-size: 16px; font-weight: 700; letter-spacing: 0.5px;">EXECUTIVE SUMMARY</h2>
+                    <p style="color: #64748b; font-size: 13px; margin: 0 0 18px 0; line-height: 1.6;">Quick overview of your property portfolio's operational performance and key performance indicators. This summary provides at-a-glance metrics to understand the current state of your real estate investments.</p>
                     
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
-                        <div style="background: linear-gradient(135deg, #f0f7ff 0%, #e0f2fe 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #1e3a8a; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Total Properties</div>
-                            <div style="font-size: 2.2rem; font-weight: 800; color: #1e3a8a;">${apartments.length}</div>
-                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Apartment Locations</div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 0;">
+                        <!-- Total Properties Card -->
+                        <div style="background: linear-gradient(135deg, #f0f7ff 0%, #e0f2fe 100%); padding: 20px; border-radius: 8px; border: 1px solid #bfdbfe; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                            <p style="margin: 0; font-size: 11px; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Total Properties</p>
+                            <p style="margin: 8px 0 0 0; font-size: 28px; font-weight: 900; color: #1e3a8a;">${apartments.length}</p>
+                            <p style="margin: 5px 0 0 0; font-size: 12px; color: #64748b; font-weight: 500;">Apartment Locations</p>
                         </div>
                         
-                        <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #16a34a; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Occupancy Rate</div>
-                            <div style="font-size: 2.2rem; font-weight: 800; color: #16a34a;">${occupancyRate}%</div>
-                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">${occupiedUnits}/${totalUnits} units</div>
+                        <!-- Total Units Card -->
+                        <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); padding: 20px; border-radius: 8px; border: 1px solid #bbf7d0; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                            <p style="margin: 0; font-size: 11px; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Total Units</p>
+                            <p style="margin: 8px 0 0 0; font-size: 28px; font-weight: 900; color: #16a34a;">${totalUnits}</p>
+                            <p style="margin: 5px 0 0 0; font-size: 12px; color: #64748b; font-weight: 500;">${occupiedUnits} Occupied, ${vacantUnits} Vacant</p>
                         </div>
                         
-                        <div style="background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #e11d48; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Collection Rate</div>
-                            <div style="font-size: 2.2rem; font-weight: 800; color: #16a34a;">${collectionRate}%</div>
-                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">${totalPaidBills} of ${totalPaidBills + totalUnpaidBills}</div>
+                        <!-- Occupancy Rate Card -->
+                        <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); padding: 20px; border-radius: 8px; border: 1px solid #fde68a; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                            <p style="margin: 0; font-size: 11px; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Occupancy Rate</p>
+                            <p style="margin: 8px 0 0 0; font-size: 28px; font-weight: 900; color: #ca8a04;">${occupancyRate}%</p>
+                            <p style="margin: 5px 0 0 0; font-size: 12px; color: #64748b; font-weight: 500;">${occupiedUnits} of ${totalUnits} Units</p>
                         </div>
                         
-                        <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #ca8a04; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                            <div style="font-size: 0.9rem; color: #475569; margin-bottom: 8px; font-weight: 600;">Monthly Revenue</div>
-                            <div style="font-size: 2.2rem; font-weight: 800; color: #b45309;">₱${totalRevenue.toLocaleString('en-PH')}</div>
-                            <div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Expected Income</div>
+                        <!-- Monthly Revenue Card -->
+                        <div style="background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%); padding: 20px; border-radius: 8px; border: 1px solid #fbcfe8; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                            <p style="margin: 0; font-size: 11px; color: #475569; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Monthly Revenue</p>
+                            <p style="margin: 8px 0 0 0; font-size: 28px; font-weight: 900; color: #be185d;">₱${totalRevenue.toLocaleString('en-PH')}</p>
+                            <p style="margin: 5px 0 0 0; font-size: 12px; color: #64748b; font-weight: 500;">Expected Income</p>
                         </div>
                     </div>
                 </div>
