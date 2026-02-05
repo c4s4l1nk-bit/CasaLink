@@ -9126,11 +9126,8 @@ class CasaLink {
             // Generate printable report HTML with enhanced content
             const reportHTML = this.generateEnhancedPrintableReport(tenants, leases, rooms, bills, maintenance, apartments);
             
-            // Create a dedicated print container
-            const printContainer = document.createElement('div');
-            printContainer.id = 'printReportContainer';
-            printContainer.innerHTML = reportHTML;
-            document.body.appendChild(printContainer);
+            // Store report HTML in window for access during printing (don't add to DOM yet)
+            window.currentReportHTML = reportHTML;
             
             // Show in modal
             const modal = ModalManager.openModal(reportHTML, {
@@ -9143,19 +9140,45 @@ class CasaLink {
             // Add print button to modal
             const modalFooter = modal.querySelector('.modal-footer');
             if (modalFooter) {
-                modalFooter.innerHTML = `
-                    <button class="btn btn-primary" id="printReportBtn" style="print:none">
-                        <i class="fas fa-print"></i> Print / Export as PDF
-                    </button>
-                    <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overflow'))" style="print:none">
-                        Close
-                    </button>
-                `;
+                const closeButton = document.createElement('button');
+                closeButton.className = 'btn btn-secondary';
+                closeButton.style.print = 'none';
+                closeButton.textContent = 'Close';
+                closeButton.addEventListener('click', () => {
+                    // Ensure cleanup before closing modal
+                    const pc = document.getElementById('printReportContainer');
+                    if (pc) pc.remove();
+                    window.currentReportHTML = null;
+                    // Close the modal
+                    ModalManager.closeModal(modal.closest('.modal-overflow'));
+                });
                 
-                // Attach print handler
-                document.getElementById('printReportBtn').addEventListener('click', () => {
+                const printButton = document.createElement('button');
+                printButton.id = 'printReportBtn';
+                printButton.className = 'btn btn-primary';
+                printButton.style.print = 'none';
+                printButton.innerHTML = '<i class="fas fa-print"></i> Print / Export as PDF';
+                printButton.addEventListener('click', () => {
                     this.handleReportPrint();
                 });
+                
+                modalFooter.innerHTML = '';
+                modalFooter.appendChild(printButton);
+                modalFooter.appendChild(closeButton);
+            }
+            
+            // Watch for modal close and cleanup if needed
+            const modalOverlay = modal.closest('.modal-overflow');
+            if (modalOverlay) {
+                const checkClosed = setInterval(() => {
+                    if (!document.body.contains(modalOverlay)) {
+                        // Modal has been removed, cleanup
+                        const pc = document.getElementById('printReportContainer');
+                        if (pc) pc.remove();
+                        window.currentReportHTML = null;
+                        clearInterval(checkClosed);
+                    }
+                }, 500);
             }
             
             this.showNotification('Comprehensive report ready for printing!', 'success');
@@ -9169,24 +9192,29 @@ class CasaLink {
         // Store current scroll position
         const scrollPos = window.scrollY;
         
-        // Show print container and hide modal overlay
-        const printContainer = document.getElementById('printReportContainer');
-        const modalOverlay = document.querySelector('.modal-overlay.active');
-        
-        if (printContainer) {
-            printContainer.style.display = 'block';
+        // Create print container from stored report HTML (if not already present)
+        let printContainer = document.getElementById('printReportContainer');
+        if (!printContainer) {
+            printContainer = document.createElement('div');
+            printContainer.id = 'printReportContainer';
+            printContainer.innerHTML = window.currentReportHTML || '';
+            document.body.appendChild(printContainer);
         }
+        
+        // Show print container
+        printContainer.style.display = 'block';
         
         // Trigger print
         window.print();
         
-        // Cleanup after print
+        // Cleanup after print dialog closes (whether user prints or cancels)
+        // Use longer timeout to ensure print dialog has fully closed
         setTimeout(() => {
-            if (printContainer) {
+            if (printContainer && document.body.contains(printContainer)) {
                 printContainer.remove();
             }
             window.scrollTo(0, scrollPos);
-        }, 100);
+        }, 1000);
     }
 
     generateEnhancedPrintableReport(tenants, leases, rooms, bills, maintenance, apartments) {
@@ -9233,13 +9261,16 @@ class CasaLink {
                 <!-- Header -->
                 <div style="text-align: center; margin-bottom: 40px; border-bottom: 4px solid #1e3a8a; padding-bottom: 25px;">
                     <h1 style="margin: 0 0 15px 0; color: #1e3a8a; font-size: 2.8rem; font-weight: 800;">📊 COMPREHENSIVE PROPERTY REPORT</h1>
-                    <p style="margin: 5px 0; color: #475569; font-size: 1.15rem; font-weight: 500;">Property Management & Analytics Summary</p>
-                    <p style="margin: 15px 0 0 0; color: #64748b; font-size: 0.95rem;">Generated: ${currentDateTime}</p>
+                    <p style="margin: 5px 0; color: #475569; font-size: 1.15rem; font-weight: 500;">Complete Property Management & Financial Analytics Overview</p>
+                    <p style="margin: 5px 0; color: #64748b; font-size: 0.9rem;">Detailed Performance Metrics and Operational Insights</p>
+                    <p style="margin: 15px 0 0 0; color: #94a3b8; font-size: 0.85rem;">Generated: ${currentDateTime}</p>
+                    <p style="margin: 3px 0; color: #cbd5e1; font-size: 0.8rem;">Report Period: ${currentDate}</p>
                 </div>
 
                 <!-- EXECUTIVE SUMMARY SECTION -->
                 <div style="margin-bottom: 35px; page-break-inside: avoid;">
-                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 20px 0; font-size: 1.4rem;">🎯 EXECUTIVE SUMMARY</h2>
+                    <h2 style="color: #1e3a8a; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; margin: 0 0 10px 0; font-size: 1.4rem;">🎯 EXECUTIVE SUMMARY</h2>
+                    <p style="color: #64748b; font-size: 0.9rem; margin: 0 0 15px 0;">Quick overview of your property portfolio performance and key operational metrics at a glance.</p>
                     
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
                         <div style="background: linear-gradient(135deg, #f0f7ff 0%, #e0f2fe 100%); padding: 18px; border-radius: 10px; border-left: 5px solid #1e3a8a; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
@@ -9427,7 +9458,12 @@ class CasaLink {
                 ${apartments.map((apartment, index) => {
                     const apartmentRooms = rooms.filter(r => r.apartmentAddress === apartment);
                     const roomNumbers = apartmentRooms.map(r => r.roomNumber);
-                    const apartmentLeases = leases.filter(l => roomNumbers.includes(l.roomNumber) && l.isActive);
+                    // IMPORTANT: Filter leases by apartment address AND room number to avoid cross-apartment collisions
+                    const apartmentLeases = leases.filter(l => 
+                        roomNumbers.includes(l.roomNumber) && 
+                        l.isActive && 
+                        (l.apartmentAddress === apartment || l.rentalAddress === apartment)
+                    );
                     const apartmentBills = bills.filter(b => roomNumbers.includes(b.roomNumber));
                     const apartmentMaintenance = maintenance.filter(m => roomNumbers.includes(m.roomNumber));
                     
@@ -9507,95 +9543,93 @@ class CasaLink {
             <style>
                 @media print {
                     * {
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        box-shadow: none !important;
-                    }
-                    
-                    html, body {
-                        width: 100% !important;
-                        height: 100% !important;
-                        background: white !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-                    
-                    body > * {
-                        display: none !important;
-                    }
-                    
-                    .modal-overlay {
-                        display: block !important;
-                        position: static !important;
-                        background: white !important;
-                        width: 100% !important;
-                        height: 100% !important;
-                        padding: 0 !important;
-                    }
-                    
-                    .modal {
-                        display: block !important;
-                        position: static !important;
-                        width: 100% !important;
-                        height: 100% !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        background: white !important;
-                    }
-                    
-                    .modal-content {
-                        display: block !important;
-                        position: static !important;
-                        width: 100% !important;
-                        height: 100% !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        background: white !important;
-                        box-shadow: none !important;
-                        border: none !important;
-                    }
-                    
-                    .modal-header {
-                        display: none !important;
-                    }
-                    
-                    .modal-footer {
-                        display: none !important;
-                    }
-                    
-                    .modal-body {
-                        display: block !important;
-                        position: static !important;
-                        width: 100% !important;
-                        height: 100% !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        background: white !important;
-                    }
-                    
-                    .printable-report {
-                        display: block !important;
-                        width: 100% !important;
-                        max-width: 100% !important;
-                        margin: 0 !important;
-                        padding: 40px !important;
-                        background: white !important;
-                    }
-                    
-                    .printable-report * {
-                        display: inherit !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                         color-adjust: exact !important;
                     }
                     
-                    table {
-                        border-collapse: collapse !important;
+                    html, body {
                         width: 100% !important;
+                        height: auto !important;
+                        background: white !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    
+                    /* Hide everything by default */
+                    body > * {
+                        display: none !important;
+                    }
+                    
+                    /* Show ONLY the print container */
+                    #printReportContainer {
+                        display: block !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: white !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        position: static !important;
+                    }
+                    
+                    .printable-report {
+                        display: block !important;
+                        width: 100% !important;
+                        margin: 0 !important;
+                        padding: 40px !important;
+                        background: white !important;
+                        font-size: 13px !important;
+                        line-height: 1.5 !important;
+                    }
+                    
+                    .printable-report h1 {
+                        font-size: 28px !important;
+                        margin: 0 0 15px 0 !important;
+                        padding: 0 !important;
+                    }
+                    
+                    .printable-report h2 {
+                        font-size: 18px !important;
+                        margin: 20px 0 15px 0 !important;
+                        padding: 0 !important;
+                        page-break-inside: avoid !important;
+                    }
+                    
+                    .printable-report h4 {
+                        font-size: 14px !important;
+                        margin: 10px 0 10px 0 !important;
+                        padding: 0 !important;
+                    }
+                    
+                    .printable-report p {
+                        margin: 5px 0 !important;
+                        padding: 0 !important;
+                    }
+                    
+                    .printable-report div {
+                        page-break-inside: avoid !important;
+                    }
+                    
+                    table {
+                        width: 100% !important;
+                        border-collapse: collapse !important;
+                        font-size: 12px !important;
+                        margin: 10px 0 !important;
+                        page-break-inside: avoid !important;
                     }
                     
                     tr {
                         page-break-inside: avoid !important;
+                    }
+                    
+                    td, th {
+                        padding: 8px !important;
+                        border: 1px solid #ccc !important;
+                    }
+                    
+                    th {
+                        background: #f5f5f5 !important;
+                        font-weight: bold !important;
                     }
                 }
             </style>
