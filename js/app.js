@@ -6637,9 +6637,97 @@ class CasaLink {
         }
     }
 
-    exportReports() {
-        console.log('📤 Exporting reports...');
-        this.showNotification('Export feature coming soon!', 'info');
+    async exportReports() {
+        try {
+            console.log('📤 Exporting reports...');
+            this.showNotification('Preparing report export...', 'info');
+            
+            // Fetch data for report
+            const [tenants, leases, rooms, bills, maintenance] = await Promise.all([
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid),
+                this.getAllRooms(),
+                DataManager.getBills(this.currentUser.uid),
+                DataManager.getMaintenanceRequests(this.currentUser.uid)
+            ]);
+            
+            const currentDate = new Date();
+            const filename = `CasaLink-Report-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, '0')}${String(currentDate.getDate()).padStart(2, '0')}.csv`;
+            const dateString = currentDate.toLocaleDateString('en-PH');
+            const timeString = currentDate.toLocaleTimeString('en-US');
+            
+            // Generate CSV content
+            const csvContent = this.generateReportCSV(tenants, leases, rooms, bills, maintenance);
+            
+            // Create blob and download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up the blob URL
+            URL.revokeObjectURL(url);
+            
+            // Show toast notification with export details
+            const toastDetails = `
+<strong>✓ Report Exported Successfully!</strong><br>
+<small style="opacity: 0.9;">Filename: <code style="background: rgba(0,0,0,0.15); padding: 2px 6px; border-radius: 3px;">${filename}</code></small><br>
+<small style="opacity: 0.85;">Generated: ${dateString} at ${timeString}</small><br>
+<small style="opacity: 0.85; margin-top: 4px; display: block;">📊 ${tenants.length} tenants • ${leases.length} leases • ${bills.length} bills</small><br>
+<small style="opacity: 0.8; margin-top: 8px; display: block;">💾 Check your Downloads folder</small>
+            `;
+            this.showToastNotification(toastDetails, 'success', 10000);
+            
+            console.log('✅ Report exported successfully:', filename);
+        } catch (error) {
+            console.error('❌ Error exporting report:', error);
+            this.showNotification('Failed to export report. Please try again.', 'error');
+        }
+    }
+
+    generateReportCSV(tenants, leases, rooms, bills, maintenance) {
+        let csv = 'CASALINK PROPERTY MANAGEMENT REPORT\n';
+        csv += `Generated: ${new Date().toLocaleString('en-US')}\n\n`;
+        
+        // Tenants Section
+        csv += '=== TENANTS ===\n';
+        csv += 'Name,Email,Phone,Status,Move-in Date,Lease ID\n';
+        tenants.forEach(tenant => {
+            csv += `"${tenant.name}","${tenant.email}","${tenant.phone || 'N/A'}","${tenant.status || 'Active'}","${tenant.moveInDate || 'N/A'}","${tenant.leaseId || 'N/A'}"\n`;
+        });
+        
+        csv += '\n=== PROPERTY LEASES ===\n';
+        csv += 'Tenant ID,Room Number,Rental Address,Monthly Rent,Status,Start Date,End Date\n';
+        leases.forEach(lease => {
+            csv += `"${lease.tenantId || 'N/A'}","${lease.roomNumber || 'N/A'}","${lease.rentalAddress || 'N/A'}","${lease.monthlyRent || 0}","${lease.isActive ? 'Active' : 'Inactive'}","${lease.startDate || 'N/A'}","${lease.endDate || 'N/A'}"\n`;
+        });
+        
+        csv += '\n=== BILLS & PAYMENTS ===\n';
+        csv += 'Tenant,Amount,Type,Status,Due Date,Paid Date\n';
+        bills.forEach(bill => {
+            csv += `"${bill.tenantName || 'N/A'}","${bill.amount || 0}","${bill.type || 'Rent'}","${bill.status || 'Pending'}","${bill.dueDate || 'N/A'}","${bill.paidDate || 'N/A'}"\n`;
+        });
+        
+        csv += '\n=== MAINTENANCE REQUESTS ===\n';
+        csv += 'Request ID,Tenant,Property,Issue,Status,Reported Date,Resolution Date\n';
+        maintenance.forEach(request => {
+            csv += `"${request.id || 'N/A'}","${request.tenantName || 'N/A'}","${request.propertyAddress || 'N/A'}","${request.issueDescription || 'N/A'}","${request.status || 'Pending'}","${request.reportedDate || 'N/A'}","${request.resolvedDate || 'N/A'}"\n`;
+        });
+        
+        csv += '\n=== REPORT SUMMARY ===\n';
+        csv += `Total Tenants,${tenants.length}\n`;
+        csv += `Active Leases,${leases.filter(l => l.isActive).length}\n`;
+        csv += `Total Bills,${bills.length}\n`;
+        csv += `Outstanding Bills,${bills.filter(b => b.status !== 'paid').length}\n`;
+        csv += `Maintenance Requests,${maintenance.length}\n`;
+        csv += `Open Maintenance,${maintenance.filter(m => m.status !== 'completed' && m.status !== 'resolved').length}\n`;
+        
+        return csv;
     }
 
     filterReportsByPeriod(period) {
@@ -9140,31 +9228,17 @@ class CasaLink {
             // Add print button to modal
             const modalFooter = modal.querySelector('.modal-footer');
             if (modalFooter) {
-                const closeButton = document.createElement('button');
-                closeButton.className = 'btn btn-secondary';
-                closeButton.style.print = 'none';
-                closeButton.textContent = 'Close';
-                closeButton.addEventListener('click', () => {
-                    // Ensure cleanup before closing modal
-                    const pc = document.getElementById('printReportContainer');
-                    if (pc) pc.remove();
-                    window.currentReportHTML = null;
-                    // Close the modal
-                    ModalManager.closeModal(modal.closest('.modal-overflow'));
-                });
-                
-                const printButton = document.createElement('button');
-                printButton.id = 'printReportBtn';
-                printButton.className = 'btn btn-primary';
-                printButton.style.print = 'none';
-                printButton.innerHTML = '<i class="fas fa-print"></i> Print / Export as PDF';
-                printButton.addEventListener('click', () => {
-                    this.handleReportPrint();
+                const downloadButton = document.createElement('button');
+                downloadButton.id = 'downloadReportBtn';
+                downloadButton.className = 'btn btn-success';
+                downloadButton.style.print = 'none';
+                downloadButton.innerHTML = '<i class="fas fa-download"></i> Download as PDF';
+                downloadButton.addEventListener('click', () => {
+                    this.downloadReportAsPDF();
                 });
                 
                 modalFooter.innerHTML = '';
-                modalFooter.appendChild(printButton);
-                modalFooter.appendChild(closeButton);
+                modalFooter.appendChild(downloadButton);
             }
             
             // Watch for modal close and cleanup if needed
@@ -9188,33 +9262,47 @@ class CasaLink {
         }
     }
 
-    handleReportPrint() {
-        // Store current scroll position
-        const scrollPos = window.scrollY;
+    downloadReportAsPDF() {
+        // Alternative method: Direct PDF download without print dialog
+        const currentDate = new Date();
+        const filename = `CasaLink-PropertyReport-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, '0')}${String(currentDate.getDate()).padStart(2, '0')}-${String(currentDate.getHours()).padStart(2, '0')}${String(currentDate.getMinutes()).padStart(2, '0')}`;
         
-        // Create print container from stored report HTML (if not already present)
-        let printContainer = document.getElementById('printReportContainer');
-        if (!printContainer) {
-            printContainer = document.createElement('div');
-            printContainer.id = 'printReportContainer';
-            printContainer.innerHTML = window.currentReportHTML || '';
-            document.body.appendChild(printContainer);
-        }
+        const reportHTML = window.currentReportHTML || '';
         
-        // Show print container
-        printContainer.style.display = 'block';
+        // Show loading state
+        this.showNotification('Generating PDF...', 'info');
         
-        // Trigger print
-        window.print();
+        // Create a temporary container with the report
+        const element = document.createElement('div');
+        element.innerHTML = reportHTML;
+        element.style.padding = '20px';
+        element.style.backgroundColor = 'white';
         
-        // Cleanup after print dialog closes (whether user prints or cancels)
-        // Use longer timeout to ensure print dialog has fully closed
-        setTimeout(() => {
-            if (printContainer && document.body.contains(printContainer)) {
-                printContainer.remove();
-            }
-            window.scrollTo(0, scrollPos);
-        }, 1000);
+        // Configure PDF options
+        const opt = {
+            margin: 10,
+            filename: `${filename}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+        };
+        
+        // Generate PDF
+        html2pdf().set(opt).from(element).save().then(() => {
+            // Show success notification
+            const dateString = currentDate.toLocaleDateString('en-PH');
+            const timeString = currentDate.toLocaleTimeString('en-US');
+            const toastDetails = `
+<strong>✓ PDF Downloaded!</strong><br>
+<small style="opacity: 0.9;">Filename: <code style="background: rgba(0,0,0,0.15); padding: 2px 6px; border-radius: 3px;">${filename}.pdf</code></small><br>
+<small style="opacity: 0.85;">Generated: ${dateString} at ${timeString}</small><br>
+<small style="opacity: 0.8; margin-top: 8px; display: block;">📁 Check your Downloads folder</small>
+            `;
+            this.showToastNotification(toastDetails, 'success', 10000);
+        }).catch(error => {
+            console.error('Error generating PDF:', error);
+            this.showNotification('Failed to generate PDF', 'error');
+        });
     }
 
     generateEnhancedPrintableReport(tenants, leases, rooms, bills, maintenance, apartments) {
@@ -10626,6 +10714,140 @@ class CasaLink {
         setTimeout(() => {
             if (notification.parentElement) {
                 notification.remove();
+            }
+        }, duration);
+    }
+
+    showToastNotification(htmlContent, type = 'info', duration = 5000) {
+        // Create toast container
+        const toast = document.createElement('div');
+        toast.className = `app-toast toast-${type}`;
+        toast.innerHTML = `
+            <div class="toast-content">
+                <div class="toast-inner">${htmlContent}</div>
+                <button class="toast-close" onclick="this.parentElement.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        // Add styles if they don't exist
+        if (!document.querySelector('#toast-styles')) {
+            const styles = document.createElement('style');
+            styles.id = 'toast-styles';
+            styles.textContent = `
+                .app-toast {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    min-width: 320px;
+                    max-width: 500px;
+                    background: white;
+                    border-radius: 12px;
+                    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+                    z-index: 99999;
+                    animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+                    margin-bottom: 10px;
+                }
+                
+                .toast-success {
+                    border-left: 4px solid #10b981;
+                    background: linear-gradient(135deg, #f0fdf4 0%, #f8f9f6 100%);
+                }
+                
+                .toast-error {
+                    border-left: 4px solid #ef4444;
+                    background: linear-gradient(135deg, #fef2f2 0%, #f9f6f6 100%);
+                }
+                
+                .toast-warning {
+                    border-left: 4px solid #f59e0b;
+                    background: linear-gradient(135deg, #fffbeb 0%, #faf8f4 100%);
+                }
+                
+                .toast-info {
+                    border-left: 4px solid #3b82f6;
+                    background: linear-gradient(135deg, #f0f9ff 0%, #f6f8fa 100%);
+                }
+                
+                .toast-content {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 12px;
+                    padding: 16px;
+                }
+                
+                .toast-inner {
+                    flex: 1;
+                    color: #1f2937;
+                    font-size: 14px;
+                    line-height: 1.5;
+                }
+                
+                .toast-inner strong {
+                    display: block;
+                    font-weight: 600;
+                    margin-bottom: 4px;
+                    color: #111827;
+                }
+                
+                .toast-inner code {
+                    background: rgba(0, 0, 0, 0.08);
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-family: 'Courier New', monospace;
+                    font-size: 13px;
+                }
+                
+                .toast-inner small {
+                    display: block;
+                    margin-top: 4px;
+                }
+                
+                .toast-close {
+                    background: none;
+                    border: none;
+                    color: #9ca3af;
+                    cursor: pointer;
+                    padding: 4px;
+                    font-size: 16px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 24px;
+                    height: 24px;
+                    transition: color 0.2s;
+                }
+                
+                .toast-close:hover {
+                    color: #6b7280;
+                }
+                
+                @keyframes slideInRight {
+                    from {
+                        transform: translateX(400px);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+        
+        document.body.appendChild(toast);
+        
+        // Auto remove after duration
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.style.animation = 'slideInRight 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) reverse';
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, 300);
             }
         }, duration);
     }

@@ -188,16 +188,78 @@ class ReportsManager {
     }
 
     // Data Export Methods
-    async exportToCSV(reportType) {
+    async exportToCSV(reportType, data) {
         console.log('📤 Exporting report to CSV:', reportType);
-        // In real app, this would generate and download a CSV file
-        return `csv_data_for_${reportType}`;
+        
+        try {
+            const csvContent = this.generateCSVContent(reportType, data);
+            const currentDate = new Date();
+            const filename = `CasaLink-${reportType}-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, '0')}${String(currentDate.getDate()).padStart(2, '0')}.csv`;
+            
+            // Create blob and download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            return { success: true, filename, format: 'CSV' };
+        } catch (error) {
+            console.error('Error exporting to CSV:', error);
+            return { success: false, error: error.message };
+        }
     }
 
-    async exportToPDF(reportType) {
+    async exportToPDF(reportType, data) {
         console.log('📤 Exporting report to PDF:', reportType);
-        // In real app, this would generate and download a PDF file
-        return `pdf_data_for_${reportType}`;
+        
+        try {
+            // Note: This is a placeholder. In a real implementation, you would use a library like jsPDF or pdfkit
+            // For now, we'll trigger the browser's print-to-PDF functionality
+            const currentDate = new Date();
+            const filename = `CasaLink-${reportType}-${currentDate.getFullYear()}${String(currentDate.getMonth() + 1).padStart(2, '0')}${String(currentDate.getDate()).padStart(2, '0')}.pdf`;
+            
+            // This would be implemented with a PDF library
+            window.print();
+            
+            return { success: true, filename, format: 'PDF' };
+        } catch (error) {
+            console.error('Error exporting to PDF:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    generateCSVContent(reportType, data) {
+        let csv = `CASALINK - ${reportType.toUpperCase()} REPORT\n`;
+        csv += `Generated: ${new Date().toLocaleString('en-US')}\n\n`;
+        
+        // Generate CSV based on report type
+        if (Array.isArray(data)) {
+            if (data.length > 0) {
+                // Get headers from first object
+                const headers = Object.keys(data[0]);
+                csv += headers.map(h => `"${h}"`).join(',') + '\n';
+                
+                // Add data rows
+                data.forEach(row => {
+                    csv += headers.map(h => {
+                        const value = row[h];
+                        return `"${value !== null && value !== undefined ? value : ''}"`;
+                    }).join(',') + '\n';
+                });
+            }
+        } else if (typeof data === 'object') {
+            // Handle object data
+            Object.entries(data).forEach(([key, value]) => {
+                csv += `${key},${value}\n`;
+            });
+        }
+        
+        return csv;
     }
 
     // Data Refresh Methods
